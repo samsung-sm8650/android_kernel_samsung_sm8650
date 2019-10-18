@@ -1222,6 +1222,9 @@ hdr-prefix = $(KBUILD_EXTMOD)/
 hdr-inst := -f $(srctree)/scripts/Makefile.headersinst dst=$(KBUILD_EXTMOD)/usr/include objtree=$(objtree)/$(KBUILD_EXTMOD) obj
 endif
 
+techpack-dirs := $(shell find $(srctree)/techpack -maxdepth 1 -mindepth 1 -type d -not -name ".*")
+techpack-dirs := $(subst $(srctree)/,,$(techpack-dirs))
+
 export INSTALL_HDR_PATH = $(objtree)/$(hdr-prefix)usr
 
 quiet_cmd_headers_install = INSTALL $(INSTALL_HDR_PATH)/include
@@ -1240,7 +1243,9 @@ ifeq ($(KBUILD_EXTMOD),)
 endif
 	$(Q)$(MAKE) $(hdr-inst)=$(hdr-prefix)include/uapi
 	$(Q)$(MAKE) $(hdr-inst)=$(hdr-prefix)arch/$(SRCARCH)/include/uapi
-	$(Q)$(MAKE) $(hdr-inst)=$(hdr-prefix)techpack
+	$(Q)for d in $(techpack-dirs); do \
+		$(MAKE) $(hdr-inst)=$(hdr-prefix)$$d/include/uapi; \
+	done
 	$(Q)for d in $(ext-mod-dirs); do \
 		$(MAKE) $(hdr-inst)=$$d/include/uapi; \
 	done
