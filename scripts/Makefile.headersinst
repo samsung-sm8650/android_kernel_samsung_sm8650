@@ -69,9 +69,9 @@ quiet_cmd_remove = REMOVE  $(unwanted)
       cmd_remove = rm -f $(unwanted)
 
 __headers: $(all-headers)
-ifneq ($(unwanted),)
-	$(call cmd,remove)
-endif
+#ifneq ($(unwanted),)
+#	$(call cmd,remove)
+#endif
 	@:
 
 existing-headers := $(filter $(old-headers), $(all-headers))
