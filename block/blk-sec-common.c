@@ -128,7 +128,6 @@ struct gendisk *blk_sec_internal_disk(void)
 }
 EXPORT_SYMBOL(blk_sec_internal_disk);
 
-#if 0
 static int blk_sec_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
 	return add_uevent_var(env, "DEVNAME=%s", dev->kobj.name);
@@ -137,7 +136,6 @@ static int blk_sec_uevent(struct device *dev, struct kobj_uevent_env *env)
 static struct device_type blk_sec_type = {
 	.uevent = blk_sec_uevent,
 };
-#endif
 
 static int __init blk_sec_common_init(void)
 {

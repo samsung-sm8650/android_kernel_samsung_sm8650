@@ -240,5 +240,6 @@ source "drivers/peci/Kconfig"
 source "drivers/hte/Kconfig"
 
 source "drivers/samsung/Kconfig"
+source "drivers/samsung/pm/sec_thermistor/Kconfig"
 
 endmenu

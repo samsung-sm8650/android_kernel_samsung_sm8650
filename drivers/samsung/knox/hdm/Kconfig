@@ -14,7 +14,7 @@
 config HDM
 	tristate "HDM feature enable"
 	depends on !ARCH_QTI_VM
-	default m
+	default n
 	help
 	  HDM TLC uses the HDM driver to trigger the hypervisor. 
 	  And it is responsible for receiving and processing bootconfig related to HDM.
