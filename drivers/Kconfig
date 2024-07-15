@@ -244,5 +244,10 @@ source "drivers/samsung/pm/sec_thermistor/Kconfig"
 source "drivers/regulator/s2mpb02/Kconfig"
 source "drivers/mfd/slsi/s2mpb02/Kconfig"
 source "drivers/sec_panel_notifier_v2/Kconfig"
+source "drivers/regulator/pmic_class/Kconfig"
+source "drivers/usb/typec/manager/Kconfig"
+source "drivers/usb/typec/common/Kconfig"
+source "drivers/usb/typec/maxim/Kconfig"
+source "drivers/muic/common/Kconfig"
 
 endmenu
