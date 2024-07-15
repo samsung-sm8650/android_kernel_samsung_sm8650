@@ -216,3 +216,4 @@ obj-y				+= input/sec_input/stm_spi/
 obj-y				+= input/sec_input/wacom/
 obj-y				+= input/sec_input/synaptics/
 obj-y				+= staging/android/switch/
+obj-y				+= sdp/

@@ -263,5 +263,6 @@ source "drivers/input/input_boost/Kconfig"
 source "drivers/input/sec_input/Kconfig"
 source "drivers/input/sec_input/stm_spi/Kconfig"
 source "drivers/staging/android/switch/Kconfig"
+source "drivers/sdp/Kconfig"
 
 endmenu
