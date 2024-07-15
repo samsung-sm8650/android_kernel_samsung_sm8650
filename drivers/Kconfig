@@ -243,5 +243,6 @@ source "drivers/samsung/Kconfig"
 source "drivers/samsung/pm/sec_thermistor/Kconfig"
 source "drivers/regulator/s2mpb02/Kconfig"
 source "drivers/mfd/slsi/s2mpb02/Kconfig"
+source "drivers/sec_panel_notifier_v2/Kconfig"
 
 endmenu

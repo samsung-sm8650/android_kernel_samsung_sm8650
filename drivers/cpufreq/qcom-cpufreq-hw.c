@@ -191,6 +191,8 @@ u64 qcom_cpufreq_get_cpu_cycle_counter(int cpu)
 }
 EXPORT_SYMBOL(qcom_cpufreq_get_cpu_cycle_counter);
 
+static void __cpufreq_hw_target_index_call_notifier_chain(struct cpufreq_policy *policy, unsigned int index);
+
 static int qcom_cpufreq_hw_target_index(struct cpufreq_policy *policy,
 					unsigned int index)
 {
@@ -198,6 +200,8 @@ static int qcom_cpufreq_hw_target_index(struct cpufreq_policy *policy,
 	const struct qcom_cpufreq_soc_data *soc_data = data->soc_data;
 	unsigned long freq = policy->freq_table[index].frequency;
 	unsigned int i;
+
+	__cpufreq_hw_target_index_call_notifier_chain(policy, index);
 
 	if (soc_data->perf_lock_support) {
 		if (data->pdmem_base)
@@ -957,3 +961,26 @@ module_exit(qcom_cpufreq_hw_exit);
 
 MODULE_DESCRIPTION("QCOM CPUFREQ HW Driver");
 MODULE_LICENSE("GPL v2");
+
+#if IS_ENABLED(CONFIG_SEC_QC_SMEM)
+static ATOMIC_NOTIFIER_HEAD(target_index_notifier_list);
+
+int qcom_cpufreq_hw_target_index_register_notifier(struct notifier_block *nb)
+{
+	return	atomic_notifier_chain_register(&target_index_notifier_list, nb);
+}
+EXPORT_SYMBOL(qcom_cpufreq_hw_target_index_register_notifier);
+
+int qcom_cpufreq_hw_target_index_unregister_notifier(struct notifier_block *nb)
+{
+	return atomic_notifier_chain_unregister(&target_index_notifier_list, nb);
+}
+EXPORT_SYMBOL(qcom_cpufreq_hw_target_index_unregister_notifier);
+
+static void __cpufreq_hw_target_index_call_notifier_chain(struct cpufreq_policy *policy, unsigned int index)
+{
+	atomic_notifier_call_chain(&target_index_notifier_list, index, policy);
+}
+#else
+static void __cpufreq_hw_target_index_call_notifier_chain(struct cpufreq_policy *policy, unsigned int index) {}
+#endif
