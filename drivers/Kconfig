@@ -241,5 +241,7 @@ source "drivers/hte/Kconfig"
 
 source "drivers/samsung/Kconfig"
 source "drivers/samsung/pm/sec_thermistor/Kconfig"
+source "drivers/regulator/s2mpb02/Kconfig"
+source "drivers/mfd/slsi/s2mpb02/Kconfig"
 
 endmenu

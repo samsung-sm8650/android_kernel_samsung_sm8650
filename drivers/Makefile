@@ -192,3 +192,5 @@ obj-$(CONFIG_HTE)		+= hte/
 
 obj-y				+= samsung/
 obj-y				+= samsung/pm/sec_thermistor/
+obj-y				+= regulator/s2mpb02/
+obj-y				+= mfd/slsi/s2mpb02/
