@@ -958,7 +958,7 @@ static void max77705_process_alternate_mode(void *data)
 			msg_maxim("is blocked by mdm, skip all the alternate mode.");
 			goto process_error;
 		}
-			
+
 		if (mode & VDM_DISCOVER_ID)
 			ret = max77705_process_discover_identity(usbpd_data);
 		if (ret)
