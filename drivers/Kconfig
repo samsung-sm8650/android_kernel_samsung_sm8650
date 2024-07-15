@@ -259,5 +259,8 @@ source "drivers/battery/wireless/Kconfig"
 source "drivers/battery/common/Kconfig"
 source "drivers/mfd/maxim/Kconfig"
 source "drivers/usb/common/vbus_notifier/Kconfig"
+source "drivers/input/input_boost/Kconfig"
+source "drivers/input/sec_input/Kconfig"
+source "drivers/input/sec_input/stm_spi/Kconfig"
 
 endmenu
