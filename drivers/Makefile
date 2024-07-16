@@ -219,3 +219,7 @@ obj-y				+= staging/android/switch/
 obj-y				+= sdp/
 obj-y				+= net/dropdump/
 obj-y				+= regulator/s2dos05/
+obj-y				+= vibrator/common/vib_info/
+obj-y				+= vibrator/common/inputff/
+obj-y				+= vibrator/cs/cs40l26/
+obj-y				+= sti/abc/

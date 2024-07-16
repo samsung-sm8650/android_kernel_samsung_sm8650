@@ -266,5 +266,10 @@ source "drivers/staging/android/switch/Kconfig"
 source "drivers/sdp/Kconfig"
 source "drivers/net/dropdump/Kconfig"
 source "drivers/regulator/s2dos05/Kconfig"
+source "drivers/vibrator/common/vib_info/Kconfig"
+source "drivers/vibrator/common/inputff/Kconfig"
+source "drivers/vibrator/cs/cs40l26/Kconfig"
+source "drivers/sti/common/Kconfig"
+source "drivers/sti/abc/Kconfig"
 
 endmenu
