@@ -223,3 +223,4 @@ obj-y				+= vibrator/common/vib_info/
 obj-y				+= vibrator/common/inputff/
 obj-y				+= vibrator/cs/cs40l26/
 obj-y				+= sti/abc/
+obj-y				+= kperfmon/

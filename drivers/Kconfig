@@ -271,5 +271,6 @@ source "drivers/vibrator/common/inputff/Kconfig"
 source "drivers/vibrator/cs/cs40l26/Kconfig"
 source "drivers/sti/common/Kconfig"
 source "drivers/sti/abc/Kconfig"
+source "drivers/kperfmon/Kconfig"
 
 endmenu
