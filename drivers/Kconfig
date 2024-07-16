@@ -265,5 +265,6 @@ source "drivers/input/sec_input/stm_spi/Kconfig"
 source "drivers/staging/android/switch/Kconfig"
 source "drivers/sdp/Kconfig"
 source "drivers/net/dropdump/Kconfig"
+source "drivers/regulator/s2dos05/Kconfig"
 
 endmenu
