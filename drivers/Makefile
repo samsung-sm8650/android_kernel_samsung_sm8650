@@ -224,3 +224,5 @@ obj-y				+= vibrator/common/inputff/
 obj-y				+= vibrator/cs/cs40l26/
 obj-y				+= sti/abc/
 obj-y				+= kperfmon/
+obj-y				+= usb/notify/
+obj-y				+= usb/vendor_notify/
