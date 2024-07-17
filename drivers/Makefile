@@ -226,3 +226,5 @@ obj-y				+= sti/abc/
 obj-y				+= kperfmon/
 obj-y				+= usb/notify/
 obj-y				+= usb/vendor_notify/
+obj-y				+= fingerprint/
+obj-y				+= input/misc/hall/

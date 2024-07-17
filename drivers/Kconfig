@@ -274,5 +274,7 @@ source "drivers/sti/abc/Kconfig"
 source "drivers/kperfmon/Kconfig"
 source "drivers/usb/notify/Kconfig"
 source "drivers/usb/vendor_notify/Kconfig"
+source "drivers/fingerprint/Kconfig"
+source "drivers/input/misc/hall/Kconfig"
 
 endmenu
