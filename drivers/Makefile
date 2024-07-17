@@ -228,3 +228,6 @@ obj-y				+= usb/notify/
 obj-y				+= usb/vendor_notify/
 obj-y				+= fingerprint/
 obj-y				+= input/misc/hall/
+obj-y				+= optics/
+obj-y				+= sensors/vl53l8/
+obj-$(CONFIG_SENSORS)           += sensors/

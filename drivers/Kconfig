@@ -276,5 +276,8 @@ source "drivers/usb/notify/Kconfig"
 source "drivers/usb/vendor_notify/Kconfig"
 source "drivers/fingerprint/Kconfig"
 source "drivers/input/misc/hall/Kconfig"
+source "drivers/optics/Kconfig"
+source "drivers/sensors/Kconfig"
+source "drivers/sensors/vl53l8/Kconfig"
 
 endmenu
