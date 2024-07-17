@@ -231,3 +231,5 @@ obj-y				+= input/misc/hall/
 obj-y				+= optics/
 obj-y				+= sensors/vl53l8/
 obj-$(CONFIG_SENSORS)           += sensors/
+obj-$(CONFIG_ADSP_FACTORY)      += adsp_factory/
+obj-y				+= regulator/s2mpb03/

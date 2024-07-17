@@ -279,5 +279,7 @@ source "drivers/input/misc/hall/Kconfig"
 source "drivers/optics/Kconfig"
 source "drivers/sensors/Kconfig"
 source "drivers/sensors/vl53l8/Kconfig"
+source "drivers/adsp_factory/Kconfig"
+source "drivers/regulator/s2mpb03/Kconfig"
 
 endmenu
