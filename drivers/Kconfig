@@ -288,5 +288,6 @@ source "drivers/nfc/nxp_combined/Kconfig"
 source "drivers/uwb/uwb_logger/Kconfig"
 source "drivers/uwb/Kconfig"
 source "drivers/input/sec_input/synaptics/Kconfig"
+source "drivers/secdp/Kconfig"
 
 endmenu
