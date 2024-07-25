@@ -37,6 +37,10 @@
 #include <trace/hooks/remoteproc.h>
 #include <linux/iopoll.h>
 
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+#include <linux/time.h>
+#include <linux/ktime.h>
+#endif
 #include "qcom_common.h"
 #include "qcom_pil_info.h"
 #include "qcom_q6v5.h"
@@ -47,6 +51,13 @@
 #define PIL_TZ_PEAK_BW	UINT_MAX
 
 #define ADSP_DECRYPT_SHUTDOWN_DELAY_MS	100
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+#define SENSOR_SUPPLY_NAME "sensor_vdd"
+#define SUBSENSOR_SUPPLY_NAME "subsensor_vdd"
+#define PROX_VDD_NAME "prox_vdd"
+#define SUBSENSOR_VDD_MAX_RETRY		500
+#define DEFERRED_PROBE_MAX_TIME		5000
+#endif
 
 static struct icc_path *scm_perf_client;
 static int scm_pas_bw_count;
@@ -54,6 +65,14 @@ static DEFINE_MUTEX(q6v5_pas_mutex);
 bool timeout_disabled;
 static bool global_sync_mem_setup;
 static bool recovery_set_cb;
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+static int sensor_supply_reg_idx = -1;
+static int subsensor_supply_reg_idx = -1;
+static int prox_vdd_reg_idx = -1;
+static int prox_vdd_retry_cnt;
+static int subsensor_vdd_retry_cnt;
+static u64 reg_init_first_ts;
+#endif
 
 #define to_rproc(d) container_of(d, struct rproc, dev)
 
@@ -254,6 +273,10 @@ static void adsp_minidump(struct rproc *rproc)
 
 	if (rproc->dump_conf == RPROC_COREDUMP_DISABLED)
 		goto exit;
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+	if (strstr(rproc->name, "adsp") && !rproc->fssr_dump)
+		goto exit;
+#endif
 
 	qcom_minidump(rproc, adsp->minidump_dev, adsp->minidump_id, adsp_segment_dump,
 			adsp->both_dumps);
@@ -427,12 +450,56 @@ exit:
 
 	return ret;
 }
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+static void disable_regulators_sensor_vdd(struct qcom_adsp *adsp)
+{
+	dev_info(adsp->dev, "%s Regulator disable: %s %d uV %d uA\n", __func__,
+		adsp->info_name, adsp->regs[sensor_supply_reg_idx].uV,
+		adsp->regs[sensor_supply_reg_idx].uA);
+	regulator_set_voltage(adsp->regs[sensor_supply_reg_idx].reg, 0, INT_MAX);
+	regulator_set_load(adsp->regs[sensor_supply_reg_idx].reg, 0);
+	regulator_disable(adsp->regs[sensor_supply_reg_idx].reg);
+
+	if (subsensor_supply_reg_idx > 0) {
+		dev_info(adsp->dev, "%s Regulator disable: %s %d uV %d uA\n", __func__,
+			adsp->info_name, adsp->regs[subsensor_supply_reg_idx].uV,
+			adsp->regs[subsensor_supply_reg_idx].uA);
+		regulator_set_voltage(adsp->regs[subsensor_supply_reg_idx].reg, 0, INT_MAX);
+		regulator_set_load(adsp->regs[subsensor_supply_reg_idx].reg, 0);
+		regulator_disable(adsp->regs[subsensor_supply_reg_idx].reg);
+	}
+
+	if (prox_vdd_reg_idx > 0) {
+		dev_info(adsp->dev, "%s Regulator disable: %s %d uV %d uA\n", __func__,
+			adsp->info_name, adsp->regs[prox_vdd_reg_idx].uV,
+			adsp->regs[prox_vdd_reg_idx].uA);
+		regulator_set_voltage(adsp->regs[prox_vdd_reg_idx].reg, 0, INT_MAX);
+		regulator_set_load(adsp->regs[prox_vdd_reg_idx].reg, 0);
+		regulator_disable(adsp->regs[prox_vdd_reg_idx].reg);
+	}
+}
+#endif
 
 static void disable_regulators(struct qcom_adsp *adsp)
 {
 	int i;
 
 	for (i = (adsp->reg_cnt - 1); i >= 0; i--) {
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+		if (!strcmp(adsp->info_name, "adsp")) {
+			if ((i == sensor_supply_reg_idx)
+				|| (i == subsensor_supply_reg_idx)
+				|| (i == prox_vdd_reg_idx)) {
+				dev_info(adsp->dev, "skip disabling %s, idx: %d",
+					SENSOR_SUPPLY_NAME, i);
+				continue;
+			}
+			if (IS_ERR(adsp->regs[i].reg)) {
+				dev_info(adsp->dev, "skip disabling idx: %d", i);
+				continue;
+			}
+		}
+#endif
 		regulator_set_voltage(adsp->regs[i].reg, 0, INT_MAX);
 		regulator_set_load(adsp->regs[i].reg, 0);
 		regulator_disable(adsp->regs[i].reg);
@@ -444,6 +511,14 @@ static int enable_regulators(struct qcom_adsp *adsp)
 	int i, rc = 0;
 
 	for (i = 0; i < adsp->reg_cnt; i++) {
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+		if (!strcmp(adsp->info_name, "adsp")) {
+			if (IS_ERR(adsp->regs[i].reg)) {
+				dev_info(adsp->dev, "skip enabling idx: %d", i);
+				continue;
+			}
+		}
+#endif
 		regulator_set_voltage(adsp->regs[i].reg, adsp->regs[i].uV, INT_MAX);
 		regulator_set_load(adsp->regs[i].reg, adsp->regs[i].uA);
 		rc = regulator_enable(adsp->regs[i].reg);
@@ -998,7 +1073,12 @@ static void qcom_pas_handover(struct qcom_q6v5 *q6v5)
 		else
 			dev_info(adsp->dev, "state changed in handover for soccp!\n");
 	}
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+	if (strcmp(adsp->rproc->name, "adsp"))
+		disable_regulators(adsp);
+#else
 	disable_regulators(adsp);
+#endif
 	clk_disable_unprepare(adsp->aggre2_clk);
 	clk_disable_unprepare(adsp->xo);
 	adsp_pds_disable(adsp, adsp->proxy_pds, adsp->proxy_pd_count);
@@ -1042,6 +1122,10 @@ static int adsp_stop(struct rproc *rproc)
 	handover = qcom_q6v5_unprepare(&adsp->q6v5);
 	if (handover)
 		qcom_pas_handover(&adsp->q6v5);
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+	if (!strcmp(adsp->info_name, "adsp") && sensor_supply_reg_idx > 0)
+		disable_regulators_sensor_vdd(adsp);
+#endif
 
 	if (is_mss_ssr_hyp_assign_en(adsp)) {
 		add_mpss_dsm_mem_ssr_dump(adsp);
@@ -1237,6 +1321,14 @@ static int adsp_init_regulator(struct qcom_adsp *adsp)
 	char uv_ua[50];
 	u32 uv_ua_vals[2];
 	const char *reg_name;
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+	struct device_node *sub_sns_reg_np =
+		of_find_node_by_name(NULL, "adsp_subsensor_reg");
+	u64 now = (u64)ktime_to_us(ktime_get_boottime());
+	bool is_adsp_rproc =
+		(strcmp(adsp->info_name, "adsp") == 0 ? true : false);
+	int max_index = 0;
+#endif
 
 	adsp->reg_cnt = of_property_count_strings(adsp->dev->of_node,
 						  "reg-names");
@@ -1244,19 +1336,45 @@ static int adsp_init_regulator(struct qcom_adsp *adsp)
 		dev_err(adsp->dev, "No regulators added!\n");
 		return 0;
 	}
-
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+	max_index = adsp->reg_cnt;
+	if (is_adsp_rproc && sub_sns_reg_np != NULL) {
+		adsp->reg_cnt++;
+		dev_info(adsp->dev, "%s increase reg_cnt for sub sns vdd:%d\n",
+			__func__, adsp->reg_cnt);
+	}
+#endif
 	adsp->regs = devm_kzalloc(adsp->dev,
 				  sizeof(struct reg_info) * adsp->reg_cnt,
 				  GFP_KERNEL);
 	if (!adsp->regs)
 		return -ENOMEM;
 
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+	for (i = 0; i < max_index; i++) {
+#else
 	for (i = 0; i < adsp->reg_cnt; i++) {
+#endif
 		of_property_read_string_index(adsp->dev->of_node, "reg-names",
 					      i, &reg_name);
 
 		adsp->regs[i].reg = devm_regulator_get(adsp->dev, reg_name);
 		if (IS_ERR(adsp->regs[i].reg)) {
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+			if (!strcmp(reg_name, PROX_VDD_NAME)) {
+				if (prox_vdd_retry_cnt > 20) {
+					dev_info(adsp->dev, "%s ignore %s %d\n",
+						__func__, reg_name,
+						adsp->reg_cnt--);
+					return 0;
+				} else {
+					prox_vdd_retry_cnt++;
+					pr_err("fail to get prox_vdd: cnt %d\n",
+						prox_vdd_retry_cnt);
+					return -EPROBE_DEFER;
+				}
+			}
+#endif
 			dev_err(adsp->dev, "failed to get %s reg\n", reg_name);
 			return PTR_ERR(adsp->regs[i].reg);
 		}
@@ -1279,7 +1397,72 @@ static int adsp_init_regulator(struct qcom_adsp *adsp)
 			adsp->regs[i].uV = uv_ua_vals[0];
 		if (uv_ua_vals[1] > 0)
 			adsp->regs[i].uA = uv_ua_vals[1];
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+		if (!strcmp(reg_name, SENSOR_SUPPLY_NAME)) {
+			dev_info(adsp->dev, "found %s, idx: %d\n", reg_name, i);
+			sensor_supply_reg_idx = i;
+		} else if (!strcmp(reg_name, PROX_VDD_NAME)) {
+			dev_info(adsp->dev, "found %s, idx: %d\n", reg_name, i);
+			prox_vdd_reg_idx = i;
+		}
+#endif
 	}
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+//subsensor
+	if (is_adsp_rproc && sub_sns_reg_np != NULL) {
+		if (reg_init_first_ts == 0) {
+			reg_init_first_ts = now;
+		} else {
+			if (now > reg_init_first_ts
+				&& now - reg_init_first_ts > (u64)DEFERRED_PROBE_MAX_TIME) {
+				subsensor_vdd_retry_cnt = SUBSENSOR_VDD_MAX_RETRY;
+			}
+		}
+
+		of_property_read_string(sub_sns_reg_np, "reg-names", &reg_name);
+
+		subsensor_supply_reg_idx = adsp->reg_cnt - 1;
+		adsp->regs[subsensor_supply_reg_idx].reg =
+			devm_regulator_get_optional(adsp->dev, reg_name);
+		if (IS_ERR(adsp->regs[subsensor_supply_reg_idx].reg)) {
+			dev_err(adsp->dev, "failed to get subsensor:%s reg\n",
+				reg_name);
+			subsensor_supply_reg_idx = -1;
+			subsensor_vdd_retry_cnt++;
+			if (subsensor_vdd_retry_cnt >= SUBSENSOR_VDD_MAX_RETRY) {
+				pr_err("fail to get subsensor_vdd: retry:%d\n",
+					subsensor_vdd_retry_cnt);
+				adsp->reg_cnt--;
+				return 0;
+			} else {
+				pr_err("not found yet, defered probe, cnt:%d\n",
+					subsensor_vdd_retry_cnt);
+				return -EPROBE_DEFER;
+			}
+		}
+
+		/* Read current(uA) and voltage(uV) value */
+		snprintf(uv_ua, sizeof(uv_ua), "%s-uV-uA", reg_name);
+		if (!of_find_property(sub_sns_reg_np, uv_ua, &len))
+			return 0;
+
+		rc = of_property_read_u32_array(sub_sns_reg_np, uv_ua,
+						uv_ua_vals,
+						ARRAY_SIZE(uv_ua_vals));
+		if (rc) {
+			dev_err(adsp->dev, "Failed subsensor uVuA value(rc:%d)\n",
+				rc);
+			return rc;
+		}
+
+		if (uv_ua_vals[0] > 0)
+			adsp->regs[subsensor_supply_reg_idx].uV = uv_ua_vals[0];
+		if (uv_ua_vals[1] > 0)
+			adsp->regs[subsensor_supply_reg_idx].uA = uv_ua_vals[1];
+		dev_info(adsp->dev, "found subsensor vdd, idx: %d\n",
+			subsensor_supply_reg_idx);
+	}
+#endif
 	return 0;
 }
 

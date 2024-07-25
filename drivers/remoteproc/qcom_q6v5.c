@@ -99,6 +99,9 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 	struct qcom_q6v5 *q6v5 = data;
 	size_t len;
 	char *msg;
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC) || IS_ENABLED(CONFIG_SND_SOC_SAMSUNG_AUDIO)
+	char *chk_name = NULL;
+#endif
 
 	/* Sometimes the stop triggers a watchdog rather than a stop-ack */
 	if (!q6v5->running) {
@@ -111,9 +114,20 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 	if (!IS_ERR(msg) && len > 0 && msg[0]) {
 		dev_err(q6v5->dev, "watchdog received: %s\n", msg);
 		trace_rproc_qcom_event(dev_name(q6v5->dev), "q6v5_wdog", msg);
-	} else {
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+		chk_name = strstr(q6v5->rproc->name, "adsp");
+		if (chk_name != NULL)
+			ssr_reason_call_back(msg, len);
+#endif
+#if IS_ENABLED(CONFIG_SND_SOC_SAMSUNG_AUDIO)
+		chk_name = strstr(q6v5->rproc->name, "adsp");
+		if (chk_name != NULL) {
+			sdp_info_print("watchdog received: %s\n", msg);
+			send_adsp_silent_reset_ev();
+		}
+#endif
+	} else
 		dev_err(q6v5->dev, "watchdog without message\n");
-	}
 
 	q6v5->running = false;
 	dev_err(q6v5->dev, "rproc recovery state: %s\n",
@@ -128,6 +142,7 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 		schedule_work(&q6v5->crash_handler);
 	else
 		rproc_report_crash(q6v5->rproc, RPROC_WATCHDOG);
+	}
 
 	return IRQ_HANDLED;
 }
@@ -137,6 +152,9 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 	struct qcom_q6v5 *q6v5 = data;
 	size_t len;
 	char *msg;
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC) || IS_ENABLED(CONFIG_SND_SOC_SAMSUNG_AUDIO)
+	char *chk_name = NULL;
+#endif
 
 	if (!q6v5->running) {
 		dev_info(q6v5->dev, "received fatal irq while q6 is offline\n");
@@ -147,9 +165,36 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 	if (!IS_ERR(msg) && len > 0 && msg[0]) {
 		dev_err(q6v5->dev, "fatal error received: %s\n", msg);
 		trace_rproc_qcom_event(dev_name(q6v5->dev), "q6v5_fatal", msg);
-	} else {
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+		chk_name = strstr(q6v5->rproc->name, "adsp");
+		if (chk_name != NULL) {
+			ssr_reason_call_back(msg, len);
+			if (strstr(msg, "IPLSREVOCER") || strstr(msg, "PMUDRSS")) {
+				q6v5->rproc->fssr = true;
+				q6v5->rproc->prev_recovery_disabled = 
+					q6v5->rproc->recovery_disabled;
+				q6v5->rproc->recovery_disabled = false;
+				if (strstr(msg, "PMUDRSS"))
+					q6v5->rproc->fssr_dump = true;
+					
+			} else {
+				q6v5->rproc->fssr = false;
+				q6v5->rproc->fssr_dump = false;
+			}
+			dev_info(q6v5->dev, "recovery:%d,%d\n",
+				(int)q6v5->rproc->prev_recovery_disabled,
+				(int)q6v5->rproc->recovery_disabled);			
+		}
+#endif
+#if IS_ENABLED(CONFIG_SND_SOC_SAMSUNG_AUDIO)
+		chk_name = strstr(q6v5->rproc->name, "adsp");
+		if (chk_name != NULL) {
+			sdp_info_print("fatal error received: %s\n", msg);
+			send_adsp_silent_reset_ev();
+		}
+#endif
+	} else
 		dev_err(q6v5->dev, "fatal error without message\n");
-	}
 
 	q6v5->running = false;
 	dev_err(q6v5->dev, "rproc recovery state: %s\n",
@@ -163,6 +208,7 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 		schedule_work(&q6v5->crash_handler);
 	else
 		rproc_report_crash(q6v5->rproc, RPROC_FATAL_ERROR);
+	}
 
 	return IRQ_HANDLED;
 }
