@@ -1081,6 +1081,19 @@ int clk_debug_init(void)
 	static struct dentry *rootdir;
 	int ret = 0;
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+	ret = register_trace_suspend_resume(
+		clk_debug_suspend_trace_probe, NULL);
+	if (ret) {
+		pr_err("%s: Failed to register suspend trace callback, ret=%d\n",
+			__func__, ret);
+		return ret;
+	} else {
+		debug_suspend = true;
+		debug_suspend_atomic = true;
+	}
+#endif
+
 	rootdir = debugfs_lookup("clk", NULL);
 	if (IS_ERR_OR_NULL(rootdir)) {
 		ret = PTR_ERR(rootdir);
