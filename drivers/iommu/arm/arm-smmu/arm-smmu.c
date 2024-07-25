@@ -895,6 +895,8 @@ static irqreturn_t arm_smmu_context_fault_retry(struct arm_smmu_domain *smmu_dom
 }
 #endif
 
+static __always_inline void __sec_debug_bug_on_enosys(struct arm_smmu_domain *smmu_domain, int idx);
+
 static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 {
 	u32 fsr;
@@ -951,7 +953,11 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 			print_fault_regs(smmu_domain, smmu, idx);
 			arm_smmu_verify_fault(smmu_domain, smmu, idx);
 		}
+#if IS_ENABLED(CONFIG_SEC_DEBUG)
+		__sec_debug_bug_on_enosys(smmu_domain, idx);
+#else
 		BUG_ON(!smmu_domain->fault_model.non_fatal);
+#endif
 	}
 	if (ret != -EBUSY) {
 		arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_FSR, fsr);
