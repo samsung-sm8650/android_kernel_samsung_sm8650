@@ -1214,4 +1214,14 @@ config LOCK_MM_AND_FIND_VMA
 
 source "mm/damon/Kconfig"
 
+config HUGEPAGE_POOL
+	bool "hugepage pool management"
+	default y
+	depends on !HIGHMEM
+	depends on !NEED_MULTIPLE_NODES
+	depends on TRANSPARENT_HUGEPAGE
+	help
+	  Enable this to provide 2MB hugepage to THP anon, ION, and GPU memory
+	  allocation requests efficiently.
+
 endmenu
