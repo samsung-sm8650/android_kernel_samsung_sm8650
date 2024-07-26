@@ -70,4 +70,19 @@ config KUNIT_DEFAULT_ENABLED
 	  In most cases this should be left as Y. Only if additional opt-in
 	  behavior is needed should this be set to N.
 
+config KUNIT_MANAGER
+	tristate "Manager for KUnit"
+	depends on SEC_KUNIT
+	depends on !UML
+	default m
+	help
+	  Enables KUnit Manager. KUnit Manager is a sysfs node for triggering
+	  on-device testing in Samsung kernel.
+
+config SEC_KUNIT
+	bool "Enable support for unit tests (KUnit)"
+	help
+	  Deprecated: CONFIG_SEC_KUNIT does not be used anymore. Please use
+	  CONFIG_KUNIT. This is only for previous tests built by SEC_KUNIT.
+
 endif # KUNIT

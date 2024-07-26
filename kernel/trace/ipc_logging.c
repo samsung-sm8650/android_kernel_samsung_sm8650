@@ -23,6 +23,8 @@
 #include <linux/ipc_logging.h>
 #include <soc/qcom/minidump.h>
 
+#include <linux/samsung/debug/sec_debug.h>
+
 #include "ipc_logging_private.h"
 
 #define LOG_PAGE_DATA_SIZE	sizeof(((struct ipc_log_page *)0)->data)
@@ -530,6 +532,9 @@ int ipc_log_string(void *ilctxt, const char *fmt, ...)
 	struct encode_context ectxt;
 	int avail_size, data_size, hdr_size = sizeof(struct tsv_header);
 	va_list arg_list;
+
+	if (!sec_debug_is_enabled())
+		return 0;
 
 	if (!ilctxt)
 		return -EINVAL;

@@ -445,6 +445,13 @@ config USB_CONFIGFS_F_FS
 	  implemented in kernel space (for instance Ethernet, serial or
 	  mass storage) and other are implemented in user space.
 
+config F_CONN_GADGET_DEBUGFS
+      bool "Conn gadget debugfs"
+      depends on USB_CONFIGFS_F_CONN_GADGET
+      default n
+      help
+        SydeSync Debugging
+
 config USB_CONFIGFS_F_ACC
 	bool "Accessory gadget"
 	depends on USB_CONFIGFS

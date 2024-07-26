@@ -247,4 +247,21 @@ config USB_MSM_EUSB2_PHY
 
 	  To compile this driver as a module, choose M here.
 
+config USB_PHY_TUNING_QCOM
+	bool "USB PHY TUNING QCOM"
+	depends on ARCH_QCOM
+	help
+	  Enable this to tune usb phy register.
+	  It is for only test.
+	  Do not enable user build binary.
+
+config USB_PHY_SETTING_QCOM
+	bool "USB PHY SETTING QCOM"
+	depends on ARCH_QCOM
+	help
+	  Enable this if you need to distinguish settings
+	  between two data roles.
+	  You will be able to set different usb phy values for host/client mode.
+	  This is only supported in QCOM AP chipset models.
+
 endmenu

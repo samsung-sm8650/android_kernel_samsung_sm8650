@@ -18,6 +18,7 @@
 #include <soc/qcom/socinfo.h>
 
 #include <asm/unaligned.h>
+#include <linux/samsung/debug/sec_debug.h>
 
 /*
  * SoC version type with major number in the upper 16 bits and minor
@@ -1141,6 +1142,34 @@ msm_get_feature_code(struct device *dev,
 }
 ATTR_DEFINE(feature_code);
 
+static ssize_t
+msm_get_crash(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	int ret = 0;
+	int is_debug_low = 0;
+
+	unsigned int debug_level = sec_debug_level();
+
+	switch (debug_level) {
+		case SEC_DEBUG_LEVEL_LOW:
+			is_debug_low = 1;
+			break;
+		case SEC_DEBUG_LEVEL_MID:
+			is_debug_low = 0;
+			break;
+	}
+
+	if (!is_debug_low) {
+#ifndef CONFIG_SEC_CDSP_NO_CRASH_FOR_ENG
+		BUG_ON(1);
+#endif
+	}
+	return ret;
+}
+ATTR_DEFINE(crash);
+
 /* End Sysfs Interfaces */
 
 static umode_t soc_info_attribute(struct kobject *kobj,
@@ -1202,6 +1231,7 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 		fallthrough;
 	case SOCINFO_VERSION(0, 12):
 		msm_custom_socinfo_attrs[i++] = &dev_attr_chip_family.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_crash.attr;
 		fallthrough;
 	case SOCINFO_VERSION(0, 11):
 	case SOCINFO_VERSION(0, 10):

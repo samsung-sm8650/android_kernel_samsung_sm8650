@@ -170,3 +170,13 @@ config SEC_UFS_FEATURE
 	  Enable Samsung feature support
 	  Enabling this allows kernel to use SEC specific feature
 	  defined and implemented by SEC.
+
+config SCSI_UFS_TEST_MODE
+	bool "Samsung UFS TEST feature"
+	default n
+	depends on SEC_UFS_FEATURE
+	help
+	  This selects support for test mode for debugging.
+	  Select this option if this feature is needed on working.
+
+	  If unsure, say N.

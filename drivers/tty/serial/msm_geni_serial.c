@@ -32,7 +32,12 @@
 #include <linux/ioctl.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/dma-mapping.h>
+#include <linux/string.h>
 #include <uapi/linux/msm_geni_serial.h>
+
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+#include "msm_geni_serial_proc_log.h"
+#endif
 
 static bool con_enabled = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE_DEFAULT_ENABLED);
 
@@ -334,6 +339,18 @@ struct msm_geni_serial_ver_info {
 	int m_fw_ver;
 	int s_fw_ver;
 };
+
+#define AT_UART_PORT            (5)
+
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+#undef DMA_RX_BUF_SIZE
+#define DMA_RX_BUF_SIZE		(4096)
+#endif
+
+#define ipc_log_printf(__n, __p, __s) \
+		scnprintf(__n, sizeof(__n), "msm_serial%s%d_%s", \
+			  (((struct uart_driver*)(__p->private_data))->cons) ? \
+			  "" : "_hs", __p->line, __s);
 
 struct msm_geni_serial_rsc {
 	struct device *ctrl_dev;
@@ -5198,6 +5215,11 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 	return ret;
 }
 
+
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+#include "msm_geni_serial_proc_log.c"
+#endif
+
 static int msm_geni_serial_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -5371,6 +5393,18 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	ret = uart_add_one_port(drv, uport);
 	if (ret)
 		dev_err(&pdev->dev, "Failed to register uart_port: %d\n", ret);
+
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+	if (!dev_port->is_console && dev_port->is_clk_aon) {
+		register_serial_ipc_log_context((struct ipc_log_context *)dev_port->ipc_log_pwr);
+		register_serial_ipc_log_context((struct ipc_log_context *)dev_port->ipc_log_misc);
+		register_serial_ipc_log_context((struct ipc_log_context *)dev_port->ipc_log_rx);
+		register_serial_ipc_log_context((struct ipc_log_context *)dev_port->ipc_log_tx);
+		ret = create_proc_log_file();
+		if (ret < 0)
+			dev_err(&pdev->dev, "Failed to register serial ipc log context: %d\n", ret);
+	}
+#endif
 
 	if (is_console)
 		pr_info("boot_kpi: M - DRIVER GENI_CONSOLE_%d Ready\n", line);

@@ -635,6 +635,8 @@ struct ufs_qcom_host {
 
 	bool broken_ahit_wa;
 	unsigned long active_cmds;
+
+	bool skip_flush;
 };
 
 static inline u32
