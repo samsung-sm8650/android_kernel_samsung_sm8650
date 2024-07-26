@@ -6784,6 +6784,7 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 		set_bit(PCIE_ERROR_PHY_INIT, &dev->pcie_error);
 #endif
 		return ret;
+	}
 
 	/* switch phy aux clock source from xo to phy aux clk */
 	if (dev->phy_aux_clk_mux && dev->phy_aux_clk_ext_src)

@@ -880,6 +880,7 @@ const void * __init of_flat_dt_match_machine(const void *default_match,
 	}
 
 	pr_info("Machine model: %s\n", of_flat_dt_get_machine_name());
+	pr_info("DAVID DEBUG");
 
 	return best_data;
 }

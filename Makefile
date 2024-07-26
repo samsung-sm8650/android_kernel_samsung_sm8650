@@ -1240,6 +1240,7 @@ ifeq ($(KBUILD_EXTMOD),)
 endif
 	$(Q)$(MAKE) $(hdr-inst)=$(hdr-prefix)include/uapi
 	$(Q)$(MAKE) $(hdr-inst)=$(hdr-prefix)arch/$(SRCARCH)/include/uapi
+	$(Q)$(MAKE) $(hdr-inst)=$(hdr-prefix)techpack
 	$(Q)for d in $(ext-mod-dirs); do \
 		$(MAKE) $(hdr-inst)=$$d/include/uapi; \
 	done

@@ -216,6 +216,7 @@ static void __init setup_machine_fdt(phys_addr_t dt_phys)
 		return;
 
 	pr_info("Machine model: %s\n", name);
+	pr_info("DAVID DEBUG");
 	dump_stack_set_arch_desc("%s (DT)", name);
 }
 

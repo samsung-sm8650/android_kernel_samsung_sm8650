@@ -18,6 +18,13 @@
 #include "qcom_common.h"
 #include "qcom_q6v5.h"
 #include <trace/events/rproc_qcom.h>
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+#include <linux/adsp/ssc_ssr_reason.h>
+#endif
+#if IS_ENABLED(CONFIG_SND_SOC_SAMSUNG_AUDIO)
+#include <sound/samsung/sec_audio_sysfs.h>
+#include <sound/samsung/snd_debug_proc.h>
+#endif
 
 #define Q6V5_PANIC_DELAY_MS	200
 
@@ -138,9 +145,9 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 	if (q6v5->ssr_subdev)
 		qcom_notify_early_ssr_clients(q6v5->ssr_subdev);
 
-	if (q6v5->rproc->recovery_disabled)
+	if (q6v5->rproc->recovery_disabled) {
 		schedule_work(&q6v5->crash_handler);
-	else
+	} else {
 		rproc_report_crash(q6v5->rproc, RPROC_WATCHDOG);
 	}
 
@@ -204,9 +211,9 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 	if (q6v5->ssr_subdev)
 		qcom_notify_early_ssr_clients(q6v5->ssr_subdev);
 
-	if (q6v5->rproc->recovery_disabled)
+	if (q6v5->rproc->recovery_disabled) {
 		schedule_work(&q6v5->crash_handler);
-	else
+	} else {
 		rproc_report_crash(q6v5->rproc, RPROC_FATAL_ERROR);
 	}
 

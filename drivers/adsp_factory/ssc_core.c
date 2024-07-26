@@ -417,7 +417,7 @@ static ssize_t remove_sensor_sysfs_store(struct device *dev,
 #if IS_ENABLED(CONFIG_SLPI_LOADING_FAILURE_DEBUG)
 	removed_sensors |= (0x1 << type);
 	if ((removed_sensors & 0x3f) == 0x3f)
-#if 0	
+#if 0
 		panic("slpi is not loaded, force panic\n");
 #else
 		pr_info("[FACTORY] %s: slpi is not loaded\n", __func__);

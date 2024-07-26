@@ -96,6 +96,7 @@
 #include <linux/cache.h>
 #include <linux/rodata_test.h>
 #include <linux/jump_label.h>
+#include <linux/mem_encrypt.h>
 #include <linux/kcsan.h>
 #include <linux/init_syscalls.h>
 #include <linux/stackdepot.h>
@@ -103,12 +104,25 @@
 #include <net/net_namespace.h>
 
 #include <asm/io.h>
+#include <asm/bugs.h>
 #include <asm/setup.h>
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
 
+#ifdef CONFIG_RKP
+#include <linux/rkp.h>
+#endif
+
+#ifdef CONFIG_KDP
+#include <linux/kdp.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/initcall.h>
+
+#if defined(CONFIG_KUNIT) && defined(CONFIG_UML)
+#include <kunit/test.h>
+#endif
 
 static int kernel_init(void *);
 
@@ -179,6 +193,10 @@ EXPORT_SYMBOL_GPL(static_key_initialized);
  */
 unsigned int reset_devices;
 EXPORT_SYMBOL(reset_devices);
+
+#if 0 //def CONFIG_KDP_NS
+int __is_kdp_recovery __kdp_ro = 0;
+#endif
 
 static int __init set_reset_devices(char *str)
 {
@@ -745,6 +763,13 @@ static int __init do_early_param(char *param, char *val,
 		}
 	}
 	/* We accept everything at this stage. */
+#if 0 //def CONFIG_KDP_NS
+	if ((strncmp(param, "bootmode", 9) == 0)) {
+		if ((strncmp(val, "2", 2) == 0))
+			__is_kdp_recovery = 1;
+	}
+#endif
+
 	return 0;
 }
 
@@ -994,11 +1019,19 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
 	sort_main_extable();
 	trap_init();
 	mm_init();
+#ifdef CONFIG_RKP
+	rkp_init();
+#endif
 	poking_init();
 	ftrace_init();
 
 	/* trace_printk can be enabled here */
 	early_trace_init();
+	
+#ifdef CONFIG_KDP
+	// move to after, early_trace_init. cuz security_integrity_current failed
+	kdp_enable = true;
+#endif
 
 	/*
 	 * Set up the scheduler prior starting any interrupts (such as the
@@ -1109,6 +1142,10 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
 		efi_enter_virtual_mode();
 #endif
 	thread_stack_cache_init();
+#ifdef CONFIG_KDP
+	if (kdp_enable)
+		kdp_init();
+#endif
 	cred_init();
 	fork_init();
 	proc_caches_init();
@@ -1534,8 +1571,12 @@ static int __ref kernel_init(void *unused)
 
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);
-		if (!ret)
+		if (!ret) {
+#ifdef CONFIG_RKP
+			rkp_deferred_init();
+#endif
 			return 0;
+		}
 		pr_err("Failed to execute %s (error %d)\n",
 		       ramdisk_execute_command, ret);
 	}
@@ -1620,6 +1661,10 @@ static noinline void __init kernel_init_freeable(void)
 		page_ext_init();
 
 	do_basic_setup();
+
+#if defined(CONFIG_KUNIT) && defined(CONFIG_UML)
+	kunit_run_all_tests();
+#endif
 
 	wait_for_initramfs();
 	console_on_rootfs();
