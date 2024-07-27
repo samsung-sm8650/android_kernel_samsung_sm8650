@@ -72,7 +72,7 @@ static __always_inline size_t __log_buf_print_time(u64 ts, char *buf)
 {
 	unsigned long rem_nsec = do_div(ts, 1000000000);
 
-	return sprintf(buf, "\n[%5lu.%06lu]",
+	return sprintf(buf, "\nDAVID [%5lu.%06lu]",
 		       (unsigned long)ts, rem_nsec / 1000);
 }
 

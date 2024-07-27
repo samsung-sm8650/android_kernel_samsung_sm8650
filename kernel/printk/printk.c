@@ -1273,7 +1273,7 @@ static size_t print_time(u64 ts, char *buf)
 {
 	unsigned long rem_nsec = do_div(ts, 1000000000);
 
-	return sprintf(buf, "[%5lu.%06lu]",
+	return sprintf(buf, "DAVID [%5lu.%06lu]",
 		       (unsigned long)ts, rem_nsec / 1000);
 }
 
