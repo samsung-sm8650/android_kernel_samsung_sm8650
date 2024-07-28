@@ -1448,10 +1448,10 @@ static int crm_probe_platform_resources(struct platform_device *pdev, struct crm
 		return -ENOMEM;
 	strscpy(crm->crmc_mgr.name, res->name, sizeof(crm->crmc_mgr.name));
 
-	crm->crmv_mgr.base = devm_platform_get_and_ioremap_resource(pdev, 3, &res);
-	if (IS_ERR(crm->crmv_mgr.base))
-		return -ENOMEM;
-	strscpy(crm->crmv_mgr.name, res->name, sizeof(crm->crmv_mgr.name));
+	//crm->crmv_mgr.base = devm_platform_get_and_ioremap_resource(pdev, 3, &res);
+	//if (IS_ERR(crm->crmv_mgr.base))
+	//	return -ENOMEM;
+	//strscpy(crm->crmv_mgr.name, res->name, sizeof(crm->crmv_mgr.name));
 
 	return 0;
 }
