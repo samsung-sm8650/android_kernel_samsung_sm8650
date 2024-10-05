@@ -504,8 +504,10 @@ static int reduce_input_current(struct max77775_charger_data *charger)
 	int input_current = 0, max_value = 0;
 
 	input_current = max77775_get_input_current(charger);
-	if (input_current <= MINIMUM_INPUT_CURRENT)
+	if (input_current <= MINIMUM_INPUT_CURRENT) {
+		charger->input_current = input_current;
 		return input_current;
+	}
 
 	if (is_wcin_type(charger->cable_type) || is_wireless_fake_type(charger->cable_type))
 		max_value = 1600;
@@ -1272,10 +1274,6 @@ static void max77775_charger_initialize(struct max77775_charger_data *charger)
 			MAX77775_RECYCLE_EN_ENABLE << CHG_CNFG_01_RECYCLE_EN_SHIFT,
 			CHG_CNFG_01_RECYCLE_EN_MASK);
 
-	/* OTG off(UNO on), boost off */
-	max77775_update_reg(charger->i2c, MAX77775_CHG_REG_CNFG_00,
-			0, CHG_CNFG_00_OTG_CTRL);
-
 	/* otg current limit 900mA */
 	max77775_update_reg(charger->i2c, MAX77775_CHG_REG_CNFG_02,
 			MAX77775_OTG_ILIM_900 << CHG_CNFG_02_OTG_ILIM_SHIFT,
@@ -1380,6 +1378,9 @@ static void max77775_charger_initialize(struct max77775_charger_data *charger)
 	max77775_set_ship_exit_db(charger, 4000);
 
 	/* disable auto shipmode, this should work under 2.6V */
+	max77775_update_reg(charger->i2c, MAX77775_CHG_REG_CNFG_13,
+			    0x00 << CHG_CNFG_13_AUTOSHIP_TH_SHIFT,
+			    CHG_CNFG_13_AUTOSHIP_TH_MASK);
 	max77775_set_auto_ship_mode(charger, 0);
 	max77775_set_ship_entry_db(charger, 192);
 
@@ -2985,6 +2986,7 @@ static void max77775_aicl_isr_work(struct work_struct *work)
 		pr_info("%s: skip\n", __func__);
 		charger->aicl_curr = 0;
 		sec_votef("ICL", VOTER_AICL, false, 0);
+		cancel_delayed_work(&charger->aicl_work);
 		__pm_relax(charger->aicl_ws);
 		return;
 	}
@@ -3748,9 +3750,8 @@ static void max77775_charger_shutdown(struct platform_device *pdev)
 		max77775_write_reg(charger->i2c, MAX77775_CHG_REG_CNFG_12, reg_data);
 
 #if defined(CONFIG_SHIPMODE_BY_VBAT) && !defined(CONFIG_SEC_FACTORY)
-		/* enable auto shipmode */
-		if ((charger->cable_type != POWER_SUPPLY_TYPE_BATTERY &&
-				charger->cable_type != POWER_SUPPLY_TYPE_UNKNOWN) || lpcharge) {
+		/* case with stray voltage due to TA connection */
+		if (!is_nocharge_type(charger->cable_type) || lpcharge) {
 			if (max77775_check_current_level())
 				max77775_check_auto_shipmode_level(charger, 2);
 			else

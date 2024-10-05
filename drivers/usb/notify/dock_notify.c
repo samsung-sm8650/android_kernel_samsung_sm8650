@@ -304,12 +304,27 @@ static int call_device_notify(struct usb_device *dev, int connect)
 			default:
 				break;
 			}
+#ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
+			/* normal hub is not blocked, only allow in vpid list */
+			if (!is_usbhub(dev)) {
+				if (!usb_check_allowlist_for_lockscreen_enabled_id(dev)) {
+					unl_info("This device will be disabled.\n");
+					disconnect_usb_driver(dev);
+					usb_set_device_state(dev, USB_STATE_NOTATTACHED);
+					dev->authorized = 0;
+				}
+			}
+#endif
 		} else {
 			send_otg_notify(o_notify,
 				NOTIFY_EVENT_DEVICE_CONNECT, 0);
 			store_usblog_notify(NOTIFY_PORT_DISCONNECT,
 				(void *)&dev->descriptor.idVendor,
 				(void *)&dev->descriptor.idProduct);
+#ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
+			if (!dev->authorized)
+				disconnect_unauthorized_device(dev);
+#endif
 		}
 	} else {
 		if (connect)
@@ -329,6 +344,7 @@ static void check_roothub_device(struct usb_device *dev, bool on)
 	int pr_speed = USB_SPEED_UNKNOWN;
 	static int hs_hub;
 	static int ss_hub;
+	int con_hub = 0;
 
 	if (!o_notify) {
 		unl_err("%s otg_notify is null\n", __func__);
@@ -352,6 +368,9 @@ static void check_roothub_device(struct usb_device *dev, bool on)
 		if (is_known_usbaudio(udev))
 			inc_hw_param(o_notify, USB_HOST_CLASS_AUDIO_SAMSUNG_COUNT);
 #endif
+		if (is_usbhub(udev))
+			con_hub = 1;
+
 		if (udev->speed > speed)
 			speed = udev->speed;
 	}
@@ -381,6 +400,8 @@ static void check_roothub_device(struct usb_device *dev, bool on)
 
 	unl_info("%s : o_notify->speed %s\n", __func__,
 		usb_speed_string(get_con_dev_max_speed(o_notify)));
+
+	set_con_dev_hub(o_notify, speed, con_hub);
 }
 
 #if defined(CONFIG_USB_HW_PARAM)

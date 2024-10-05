@@ -30,7 +30,7 @@
 
 #define MFC_NU1668_DRIVER_VERSION			0x001E
 
-#define MFC_FW_BIN_VERSION					0x0322
+#define MFC_FW_BIN_VERSION					0x0327
 
 #define MFC_FLASH_FW_HEX_PATH               "mfc/mfc_fw_flash.bin"
 #define MFC_FW_SDCARD_BIN_PATH              "wpc_fw_sdcard.bin"
@@ -1146,6 +1146,7 @@ struct mfc_charger_platform_data {
 
 	u32 mpp_epp_vout;
 	u32 mpp_epp_def_power;
+	u32 mpp_epp_max_count;
 
 	bool pdrc_vrect_clear;
 };
@@ -1189,10 +1190,11 @@ struct mfc_charger_data {
 	struct wakeup_source *wpc_cs100_ws;
 	struct wakeup_source *wpc_pdet_b_ws;
 	struct wakeup_source *wpc_rx_phm_ws;
-	struct wakeup_source *wpc_check_rx_power_ws;
+	struct wakeup_source *wpc_rx_power_trans_fail_ws;
 	struct wakeup_source *wpc_vrect_check_ws;
 	struct wakeup_source *wpc_phm_exit_ws;
 	struct wakeup_source *epp_clear_ws;
+	struct wakeup_source *epp_count_ws;
 	struct workqueue_struct *wqueue;
 	struct work_struct wcin_work;
 	struct delayed_work wpc_det_work;
@@ -1220,9 +1222,10 @@ struct mfc_charger_data {
 	struct delayed_work align_check_work;
 	struct delayed_work mode_change_work;
 	struct delayed_work wpc_rx_phm_work;
-	struct delayed_work wpc_check_rx_power_work;
+	struct delayed_work wpc_rx_power_trans_fail_work;
 	struct delayed_work wpc_phm_exit_work;
 	struct delayed_work epp_clear_timer_work;
+	struct delayed_work epp_count_work;
 
 	struct alarm phm_alarm;
 
@@ -1252,7 +1255,6 @@ struct mfc_charger_data {
 	bool is_suspend;
 	int tx_id;
 	int tx_id_cnt;
-	bool initial_vrect;
 	bool rx_phm_status;
 	int rx_phm_state;
 
@@ -1330,6 +1332,7 @@ struct mfc_charger_data {
 	u8 mpp_cloak;
 
 	int epp_time;
+	int epp_count;
 
 	char d_buf[MFC_BAT_DUMP_SIZE];
 };

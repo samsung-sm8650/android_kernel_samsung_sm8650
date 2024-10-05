@@ -6,6 +6,8 @@
 
 struct ssg_request_info {
 	pid_t tgid;
+
+	sector_t sector;
 	unsigned int data_size;
 
 	struct blkcg_gq *blkg;
@@ -146,7 +148,7 @@ static inline void ssg_blkcg_dec_rq(struct blkcg_gq *blkg)
 
 /* ssg-wb.c */
 #if IS_ENABLED(CONFIG_MQ_IOSCHED_SSG_WB)
-extern void ssg_wb_ctrl(struct ssg_data *ssg);
+extern void ssg_wb_ctrl(struct ssg_data *ssg, struct request *rq);
 extern void ssg_wb_depth_updated(struct blk_mq_hw_ctx *hctx);
 extern void ssg_wb_init(struct ssg_data *ssg);
 extern void ssg_wb_exit(struct ssg_data *ssg);
@@ -170,7 +172,7 @@ extern ssize_t ssg_wb_off_delay_msecs_show(struct elevator_queue *e, char *page)
 extern ssize_t ssg_wb_off_delay_msecs_store(struct elevator_queue *e, const char *page, size_t count);
 extern ssize_t ssg_wb_triggered_show(struct elevator_queue *e, char *page);
 #else
-static inline void ssg_wb_ctrl(struct ssg_data *ssg)
+static inline void ssg_wb_ctrl(struct ssg_data *ssg, struct request *rq)
 {
 }
 

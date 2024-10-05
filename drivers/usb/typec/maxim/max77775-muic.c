@@ -965,6 +965,15 @@ static ssize_t max77775_muic_show_vbus_value(struct device *dev,
 }
 
 #if IS_ENABLED(CONFIG_HICCUP_CHARGER)
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+static void max77775_muic_reset_hiccup_mode_for_watercable(struct max77775_muic_data *muic_data)
+{
+	/*Source Connection Status of Moisture Case, 0x0: unplug TA, 0x1:plug TA*/
+	if (muic_data->usbc_pdata->ta_conn_status == 0x1)
+		max77775_ccic_event_work(muic_data->usbc_pdata,
+			PDIC_NOTIFY_DEV_MUIC, PDIC_NOTIFY_ID_WATER_CABLE, 1, 0, 0);
+}
+#endif
 static ssize_t hiccup_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -981,6 +990,9 @@ static ssize_t hiccup_store(struct device *dev,
 		max77775_pdic_manual_ccopen_request(0);
 		max77775_muic_hiccup_clear(muic_data);
 		muic_data->is_hiccup_mode = MUIC_HICCUP_MODE_OFF;
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+		max77775_muic_reset_hiccup_mode_for_watercable(muic_data);
+#endif
 	} else
 		pr_warn("%s invalid com : %s\n", __func__, buf);
 
@@ -1730,7 +1742,7 @@ static void max77775_muic_detect_dev(struct max77775_muic_data *muic_data,
 	} else {
 		md75_info_usb("%s DETACHED\n", __func__);
 
-		if (vbvolt == 0 && chgtyp == CHGTYP_DEDICATED_CHARGER) {
+		if (irq == muic_data->irq_chgtyp && vbvolt == 0 && chgtyp == CHGTYP_DEDICATED_CHARGER) {
 			md75_info_usb("[MUIC] %s USB Killer Detected!!!\n", __func__);
 #ifdef CONFIG_USB_NOTIFY_PROC_LOG
 			event = NOTIFY_EXTRA_USBKILLER;
@@ -2004,6 +2016,9 @@ static void max77775_muic_print_reg_log(struct work_struct *work)
 	struct i2c_client *i2c = muic_data->i2c;
 	struct i2c_client *pmic_i2c = muic_data->usbc_pdata->i2c;
 	u8 status[12] = {0, };
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+	u8 spare_status[2] = {0, };
+#endif
 	u8 fw_rev = 0, fw_rev2 = 0;
 	int delay_time = 60000;
 	static int prev_opcode_fail_count;
@@ -2029,6 +2044,14 @@ static void max77775_muic_print_reg_log(struct work_struct *work)
 	md75_info_usb("%s UIC_INT_M:0x%x, CC_INT_M:0x%x, PD_INT_M:0x%x, VDM_INT_M:0x%x, PMIC_MASK:0x%x, WDT:%d, POR:%d\n",
 		__func__, status[7], status[8], status[9], status[10], status[11],
 		muic_data->usbc_pdata->watchdog_count, muic_data->usbc_pdata->por_count);
+
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+	max77775_muic_read_reg(i2c, MAX77775_USBC_REG_SPARE_STATUS1, &spare_status[0]);
+	max77775_muic_read_reg(i2c, MAX77775_USBC_REG_SPARE_INT_M, &spare_status[1]);
+
+	md75_info_usb("%s TA:0x%x, SPARE_INT_M:0x%x\n",
+		__func__, spare_status[0], spare_status[1]);
+#endif
 
 	if (max77775_need_check_stuck(usbc_data)) {
 		msg_maxim("%s stuck suppose.", __func__);

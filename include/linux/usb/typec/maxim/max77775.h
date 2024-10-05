@@ -93,7 +93,11 @@
 #define REG_CC_INT_M_INIT		0x20
 #define REG_PD_INT_M_INIT		0x00
 #define REG_VDM_INT_M_INIT		0xF0
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+#define REG_SPARE_INT_M_INIT	0x3F
+#else
 #define REG_SPARE_INT_M_INIT	0x7F
+#endif
 
 /*
  * REG_UIC_INT Interrupts
@@ -130,6 +134,7 @@
  * REG_SPARE_INT Interrupts
  */
 #define BIT_USBID				BIT(7)
+#define BIT_TACONNI				BIT(6)
 
 /*
  * REG_USBC_STATUS1
@@ -182,6 +187,11 @@
 #define BIT_PD_PSRDY			BIT(4)
 #define BIT_FCT_ID				BITS(3, 0)
 
+/*
+ * REG_SPARE_STATUS
+ */
+#define BIT_SPARE_CC_OPEN		BIT(1)
+#define BIT_SPARE_TA_CONNECT	BIT(0)
 
 /** opcode reg **/
 
@@ -540,6 +550,8 @@ typedef enum {
 	OPCODE_SBU_CTRL1_R = 0x85,
 	OPCODE_SBU_CTRL1_W = 0x86,
 	OPCODE_FCCTRL1_W = 0x88,
+	OPCODE_MOISTURE_CC_OPEN = 0x9C,
+
 	OPCODE_ACTIVE_DISCHARGE = 0x91,
 	OPCODE_HICCUP_ENABLE = 0x92,
 	OPCODE_AUTO_SHIPMODE = 0x97,

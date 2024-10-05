@@ -41,6 +41,29 @@ enum EVENT_CMD {
 #define SEC_VIBRATOR_INPUTFF_DEFAULT_HIGH_TEMP_REF INT_MAX
 #define SEC_VIBRATOR_INPUTFF_DEFAULT_HIGH_TEMP_RATIO 100
 
+#define VIB_FREE_DURATION 0
+
+enum compose_thread_state {
+	COMPOSE_STOP = 0,
+	COMPOSE_RUN = 1,
+	COMPOSE_START = 2,
+	COMPOSE_EXIT = 3,
+};
+
+struct common_inputff_effect {
+	int type;
+	int effect_id;
+	int scale;
+	int duration;
+	int frequency;
+};
+
+struct common_inputff_effects {
+	struct common_inputff_effect effects[MAX_COMPOSE_EFFECT];
+	int num_of_effects;
+	int repeat;
+};
+
 struct sec_vib_inputff_ops {
 	int (*upload)(struct input_dev *dev,
 		struct ff_effect *effect, struct ff_effect *old);
@@ -51,7 +74,12 @@ struct sec_vib_inputff_ops {
 	int (*get_i2c_test)(struct input_dev *dev);
 	int (*get_i2s_test)(struct input_dev *dev);
 	int (*fw_load)(struct input_dev *dev, unsigned int fw_id);
+	int (*get_ls_temp)(struct input_dev *dev, u32 *val);
+	int (*set_ls_temp)(struct input_dev *dev, u32 val);
 	int (*set_trigger_cal)(struct input_dev *dev, u32 val);
+	int (*get_ls_calib_res)(struct input_dev *dev, char *buf);
+	int (*set_ls_calib_res)(struct input_dev *dev, char *buf);
+	int (*get_ls_calib_res_name)(struct input_dev *dev, char *buf);
 	u32 (*get_f0_measured)(struct input_dev *dev);
 	int (*get_f0_offset)(struct input_dev *dev);
 	int (*set_f0_offset)(struct input_dev *dev, u32 val);
@@ -94,6 +122,7 @@ struct sec_vib_inputff_compose {
 	int num_of_compose_effects;
 	int upload_compose_effect;
 	int compose_effect_id;
+	int upload_partial_effect;
 	int compose_repeat;
 };
 
@@ -133,7 +162,9 @@ struct sec_vib_inputff_drvdata {
 	int support_fw;
 	int trigger_calibration;
 	struct sec_vib_inputff_fwdata fw;
+	bool is_ls_calibration;
 	bool is_f0_tracking;
+	bool is_le_support;
 	struct sec_vib_inputff_pdata *pdata;
 
 	enum EVENT_CMD event_idx;

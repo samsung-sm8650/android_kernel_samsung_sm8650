@@ -10,3 +10,4 @@ adsp_factory_module-$(CONFIG_SUPPORT_DUAL_6AXIS) += lsm6dso_sub_accel.o lsm6dso_
 adsp_factory_module-$(CONFIG_LSM6DSL_FACTORY) += lsm6dsl_accel.o lsm6dsl_gyro.o
 adsp_factory_module-$(CONFIG_SUPPORT_AK09973) += ak09973_digital_hall.o
 adsp_factory_module-$(CONFIG_FLIP_COVER_DETECTOR_FACTORY) += flip_cover_detector.o
+adsp_factory_module-$(CONFIG_BACKTAP_FACTORY) += back_tap.o

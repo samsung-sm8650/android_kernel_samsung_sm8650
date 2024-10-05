@@ -263,6 +263,11 @@ static ssize_t epen_checksum_store(struct device *dev,
 		return count;
 	}
 
+	if (!wacom->probe_done) {
+		input_err(true, wacom->dev, "%s: probe_done yet, skip!\n", __func__);
+		return count;
+	}
+
 	if (wacom->reset_is_on_going) {
 		input_err(true, wacom->dev, "%s: reset is on going, skip!\n",
 				__func__);
@@ -1169,6 +1174,11 @@ int set_wacom_ble_charge_mode(bool mode)
 		return 0;
 	}
 
+	if (!wacom->probe_done) {
+		input_err(true, wacom->dev, "%s: probe_done yet, skip!\n", __func__);
+		return 0;
+	}
+
 	mutex_lock(&wacom->ble_charge_mode_lock);
 	input_info(true, wacom->dev, "%s start(%d)\n", __func__, mode);
 
@@ -1221,6 +1231,11 @@ static ssize_t epen_ble_charging_mode_store(struct device *dev,
 	struct sec_cmd_data *sec = dev_get_drvdata(dev);
 	struct wacom_data *wacom = container_of(sec, struct wacom_data, sec);
 	int retval = 0;
+
+	if (!wacom->probe_done) {
+		input_err(true, wacom->dev, "%s: probe_done yet, skip!\n", __func__);
+		return count;
+	}
 
 	if (kstrtoint(buf, 0, &retval)) {
 		input_err(true, wacom->dev, "%s: failed to get param\n",
@@ -2679,14 +2694,17 @@ static void get_checksum(void *device_data)
 	wacom->checksum_result = false;
 
 	if (sec_input_cmp_ic_status(wacom->dev, CHECK_POWEROFF)) {
-		input_err(true, wacom->dev, "%s: power off state, skip!\n",
-				__func__);
+		input_err(true, wacom->dev, "%s: power off state, skip!\n", __func__);
+		goto out;
+	}
+
+	if (!wacom->probe_done) {
+		input_err(true, wacom->dev, "%s: probe_done yet, skip!\n", __func__);
 		goto out;
 	}
 
 	if (wacom->reset_is_on_going) {
-		input_err(true, wacom->dev, "%s: reset is on going, skip!\n",
-				__func__);
+		input_err(true, wacom->dev, "%s: reset is on going, skip!\n", __func__);
 		goto out;
 	}
 

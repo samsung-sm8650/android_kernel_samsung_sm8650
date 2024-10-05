@@ -194,7 +194,7 @@ static void wb_ctrl_work(struct work_struct *work)
 				ssg_wb->off_delay_jiffies);
 }
 
-void ssg_wb_ctrl(struct ssg_data *ssg)
+void ssg_wb_ctrl(struct ssg_data *ssg, struct request *rq)
 {
 	struct ssg_wb_data *ssg_wb = ssg->wb_data;
 
@@ -202,6 +202,10 @@ void ssg_wb_ctrl(struct ssg_data *ssg)
 		return;
 
 	if (atomic_read(&ssg_wb->wb_triggered))
+		return;
+
+	if (((rq->cmd_flags & REQ_OP_MASK) == REQ_OP_READ)
+			&& atomic_read(&ssg->allocated_rqs) < ssg_wb->on_rqs)
 		return;
 
 	if (!work_busy(&ssg_wb->wb_ctrl_work.work))

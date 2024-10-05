@@ -30,6 +30,7 @@
 #include <linux/usb/typec/common/pdic_core.h>
 #include <linux/usb/typec/common/pdic_sysfs.h>
 #include <linux/usb/typec/common/pdic_notifier.h>
+#include <linux/usb/typec/common/pdic_param.h>
 #endif
 #include <linux/muic/common/muic.h>
 #include <linux/usb/typec/maxim/max77775-muic.h>
@@ -470,6 +471,8 @@ static int max77775_firmware_update_sys(struct max77775_usbc_platform_data *data
 	switch (usbc_data->max77775->pmic_rev) {
 	case MAX77775_PASS1:
 	case MAX77775_PASS2:
+	case MAX77775_PASS3:
+	case MAX77775_PASS4:
 		ret = max77775_usbc_fw_update(usbc_data->max77775, fw_entry->data,
 					fw_size, fwup[fw_dir].enforce_do);
 		break;
@@ -519,6 +522,8 @@ static int max77775_firmware_update_misc(struct max77775_usbc_platform_data *dat
 		switch (pmic_rev) {
 		case MAX77775_PASS1:
 		case MAX77775_PASS2:
+		case MAX77775_PASS3:
+		case MAX77775_PASS4:
 			fw_enable = 1;
 			break;
 		default:
@@ -583,6 +588,19 @@ void max77775_set_jig_on(struct max77775_usbc_platform_data *usbpd_data, int jig
 	max77775_usbc_opcode_read(usbpd_data, &read_data);
 }
 
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+void max77775_set_moisture_cc_open(struct max77775_usbc_platform_data *usbpd_data)
+{
+	usbc_cmd_data write_data;
+
+	init_usbc_cmd_data(&write_data);
+	write_data.opcode = OPCODE_MOISTURE_CC_OPEN;
+	write_data.write_length = 0x1;
+	write_data.read_length = 0x0;
+	write_data.write_data[0] = 0x1;
+	max77775_usbc_opcode_write(usbpd_data, &write_data);
+}
+#endif
 void max77775_control_option_command(struct max77775_usbc_platform_data *usbpd_data, int cmd)
 {
 	struct max77775_cc_data *cc_data = usbpd_data->cc_data;
@@ -1140,12 +1158,12 @@ int max77775_store_hmd_dev(struct max77775_usbc_platform_data *usbc_data, char *
 	tok = strsep(&str, ",");
 	i = 0, j = 0;
 	while (tok != NULL && *tok != 0xa/*LF*/) {
-		if (i > num_hmd * HMD_POWER_FIELD_MAX) {
+		if (i >= num_hmd * HMD_POWER_FIELD_MAX) {
 			msg_maxim("num of tok cannot exceed <%dx%d>!",
 				num_hmd, HMD_POWER_FIELD_MAX);
 			break;
 		}
-		if (j > MAX_NUM_HMD) {
+		if (j >= MAX_NUM_HMD) {
 			msg_maxim("num of HMD cannot exceed %d!",
 				MAX_NUM_HMD);
 			break;
@@ -1493,6 +1511,17 @@ static void max77775_init_opcode
 		max77775_set_enable_alternate_mode(ALTERNATE_MODE_START);
 		max77775_muic_enable_detecting_short(usbc_data->muic_data);
 	}
+#ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
+	else {
+		max77775_set_enable_alternate_mode(ALTERNATE_MODE_READY | ALTERNATE_MODE_STOP);
+	}
+#endif
+#if IS_ENABLED(CONFIG_PDIC_NOTIFIER)
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+	if (!is_lpcharge_pdic_param())
+		max77775_set_moisture_cc_open(usbc_data);
+#endif
+#endif
 }
 
 static bool max77775_check_recover_opcode(u8 opcode)
@@ -1505,6 +1534,9 @@ static bool max77775_check_recover_opcode(u8 opcode)
 	case OPCODE_SET_ALTERNATEMODE:
 	case OPCODE_SBU_CTRL1_W:
 	case OPCODE_SAMSUNG_CCSBU_SHORT:
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+	case OPCODE_MOISTURE_CC_OPEN:
+#endif
 		ret = true;
 		break;
 	default:
@@ -1546,6 +1578,11 @@ static void max77775_recover_opcode
 				max77775_muic_enable_detecting_short
 					(usbc_data->muic_data);
 				break;
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+			case OPCODE_MOISTURE_CC_OPEN:
+				max77775_set_moisture_cc_open(usbc_data);
+				break;
+#endif
 			default:
 				break;
 			}
@@ -2050,7 +2087,7 @@ static void max77775_irq_execute(struct max77775_usbc_platform_data *usbc_data,
 					msg_maxim("vdm_response is error value[%x]", vdm_response);
 				break;
 			case UNSTRUCTURED_VDM:
-				max77775_sec_unstructured_message_handler(usbc_data, data, len + OPCODE_SIZE);
+				max77775_uvdm_opcode_response_handler(usbc_data, data, len + OPCODE_SIZE);
 				break;
 			default:
 				msg_maxim("vdm_type isn't valid error");
@@ -2174,17 +2211,15 @@ static int max77775_usbc_increase_opcode_fail(struct max77775_usbc_platform_data
 		usbc_data->opcode_fail_count, enforce);
 
 	if (usbc_data->opcode_fail_count == reset_count || enforce) {
-		if (usbc_data->FW_Revision >= 0x2d) {
 #if IS_ENABLED(CONFIG_USB_HW_PARAM)
-			struct otg_notify *o_notify = get_otg_notify();
+		struct otg_notify *o_notify = get_otg_notify();
 
-			if (o_notify)
-				inc_hw_param(o_notify, USB_CCIC_STUCK_COUNT);
+		if (o_notify)
+			inc_hw_param(o_notify, USB_CCIC_STUCK_COUNT);
 #endif
 #if IS_ENABLED(CONFIG_SEC_ABC)
-			sec_abc_send_event("MODULE=pdic@WARN=ccic_stuck");
+		sec_abc_send_event("MODULE=pdic@INFO=ccic_stuck");
 #endif
-		}
 	}
 
 	if (usbc_data->opcode_fail_count >= reset_count || enforce) {
@@ -2981,7 +3016,7 @@ void max77775_usbc_check_sysmsg(struct max77775_usbc_platform_data *usbc_data, u
 		msg_maxim("CCX_RELEASE_SHORT");
 		usbc_data->pd_data->cc_sbu_short = false;
 		usbc_data->cc_data->ccistat = NOT_IN_UFP_MODE;
-		break;		
+		break;
 	default:
 		break;
 	}
@@ -3200,6 +3235,33 @@ static irqreturn_t max77775_usbid_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+static irqreturn_t max77775_taconnect_irq(int irq, void *data)
+{
+	struct max77775_usbc_platform_data *usbc_data = data;
+	u8 spare_status1 = 0;
+	u8 cc_open_status = 0;
+
+	msg_maxim("%s: IRQ(%d)_IN", __func__, irq);
+	if (usbc_data->current_connstat == WATER) {
+		max77775_read_reg(usbc_data->muic, MAX77775_USBC_REG_SPARE_STATUS1, &spare_status1);
+		usbc_data->ta_conn_status = (spare_status1 & BIT_SPARE_TA_CONNECT) >> FFS(BIT_SPARE_TA_CONNECT);
+		cc_open_status = (spare_status1 & BIT_SPARE_CC_OPEN) >> FFS(BIT_SPARE_CC_OPEN);
+		/*Source Connection Status of Moisture Case, 0x0: unplug TA, 0x1:plug TA*/
+		if (usbc_data->ta_conn_status == 0x1) {
+			msg_maxim("Water Cable Attached (CC OPEN Status : %s)", cc_open_status ? "Enabled" : "Disabled");
+			cancel_delayed_work(&usbc_data->set_ccopen_for_watercable_work);
+			schedule_delayed_work(&usbc_data->set_ccopen_for_watercable_work, msecs_to_jiffies(100));
+		} else {
+			msg_maxim("Water Cable Detached (CC OPEN Status : %s)", cc_open_status ? "Enabled" : "Disabled");
+			cancel_delayed_work(&usbc_data->set_ccopen_for_watercable_work);
+		}
+	}
+	msg_maxim("%s: IRQ(%d)_OUT", __func__, irq);
+	return IRQ_HANDLED;
+}
+#endif
+
 int max77775_init_irq_handler(struct max77775_usbc_platform_data *usbc_data)
 {
 	int ret = 0;
@@ -3336,12 +3398,29 @@ int max77775_init_irq_handler(struct max77775_usbc_platform_data *usbc_data)
 		}
 	}
 
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+	usbc_data->irq_taconn = usbc_data->irq_base + MAX77775_IRQ_TACONN_INT;
+	if (usbc_data->irq_taconn) {
+		ret = request_threaded_irq(usbc_data->irq_taconn,
+			   NULL, max77775_taconnect_irq,
+			   0,
+			   "usbc-taconnect-irq", usbc_data);
+		if (ret) {
+			md75_err_usb("%s: Failed to Request IRQ (%d)\n", __func__, ret);
+			return ret;
+		}
+	}
+#endif
+
 	return ret;
 }
 
 void max77775_usbc_free_irq(struct max77775_usbc_platform_data *usbc_data)
 {
 	free_irq(usbc_data->irq_usbid, usbc_data);
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+	free_irq(usbc_data->irq_taconn, usbc_data);
+#endif
 	free_irq(usbc_data->irq_apcmd, usbc_data);
 	free_irq(usbc_data->irq_sysmsg, usbc_data);
 	free_irq(usbc_data->irq_vdm0, usbc_data);
@@ -3363,7 +3442,7 @@ void max77775_usbc_free_irq(struct max77775_usbc_platform_data *usbc_data)
 	free_irq(usbc_data->cc_data->irq_ccpinstat, usbc_data);
 	free_irq(usbc_data->cc_data->irq_ccistat, usbc_data);
 	free_irq(usbc_data->cc_data->irq_ccvcnstat, usbc_data);
-	free_irq(usbc_data->cc_data->irq_ccstat, usbc_data);	
+	free_irq(usbc_data->cc_data->irq_ccstat, usbc_data);
 }
 
 static void max77775_usbc_umask_irq(struct max77775_usbc_platform_data *usbc_data)
@@ -3464,6 +3543,19 @@ static void delayed_external_notifier_init(struct work_struct *work)
 			md75_err_usb("fail to init external notifier\n");
 	} else
 		md75_info_usb("%s : external notifier register done!\n", __func__);
+}
+#endif
+
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+static void max77775_set_ccopen_for_watercable(struct work_struct *work)
+{
+	struct max77775_usbc_platform_data *usbc_data = g_usbc_data;
+
+	md75_info_usb("%s\n", __func__);
+#if IS_ENABLED(CONFIG_PDIC_NOTIFIER)
+	max77775_ccic_event_work(usbc_data,
+		PDIC_NOTIFY_DEV_MUIC, PDIC_NOTIFY_ID_WATER_CABLE, 1, 0, 0);
+#endif
 }
 #endif
 
@@ -3621,6 +3713,41 @@ static void max77775_usbpd_sbu_switch_control(void *data, int on)
 	write_data.read_length = 0x0;
 
 	max77775_usbc_opcode_write(usbpd_data, &write_data);
+}
+
+void max77775_acc_detach_check(struct work_struct *wk)
+{
+	struct delayed_work *delay_work =
+		container_of(wk, struct delayed_work, work);
+	struct max77775_usbc_platform_data *usbpd_data =
+		container_of(delay_work, struct max77775_usbc_platform_data, acc_detach_work);
+#if IS_ENABLED(CONFIG_USB_NOTIFY_LAYER)
+	struct otg_notify *o_notify = get_otg_notify();
+#endif
+
+	md75_info_usb("%s : pd_state : %d, acc_type : %d\n", __func__,
+		usbpd_data->pd_state, usbpd_data->acc_type);
+	if (usbpd_data->pd_state == max77775_State_PE_Initial_detach) {
+		if (usbpd_data->acc_type != PDIC_DOCK_DETACHED) {
+			if (usbpd_data->acc_type != PDIC_DOCK_NEW)
+				pdic_send_dock_intent(PDIC_DOCK_DETACHED);
+			pdic_send_dock_uevent(usbpd_data->Vendor_ID,
+					usbpd_data->Product_ID,
+					PDIC_DOCK_DETACHED);
+			usbpd_data->acc_type = PDIC_DOCK_DETACHED;
+			usbpd_data->Vendor_ID = 0;
+			usbpd_data->Product_ID = 0;
+			usbpd_data->send_enter_mode_req = 0;
+			usbpd_data->Device_Version = 0;
+			max77775_ccic_event_work(usbpd_data,
+				PDIC_NOTIFY_DEV_ALL, PDIC_NOTIFY_ID_CLEAR_INFO,
+				PDIC_NOTIFY_ID_DEVICE_INFO, 0, 0);
+#if IS_ENABLED(CONFIG_USB_NOTIFY_LAYER)
+			if (o_notify)
+				send_otg_notify(o_notify, NOTIFY_EVENT_HMD_EXT_CURRENT, 0);
+#endif
+		}
+	}
 }
 
 struct usbpd_ops ops_usbpd = {
@@ -3829,6 +3956,10 @@ static int max77775_usbc_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&usbc_data->usb_external_notifier_register_work,
 				  delayed_external_notifier_init);
 #endif
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+	INIT_DELAYED_WORK(&usbc_data->set_ccopen_for_watercable_work,
+				  max77775_set_ccopen_for_watercable);
+#endif
 	init_completion(&usbc_data->uvdm_longpacket_out_wait);
 	init_completion(&usbc_data->uvdm_longpacket_in_wait);
 #if IS_ENABLED(CONFIG_PDIC_NOTIFIER)
@@ -4025,6 +4156,9 @@ static int max77775_usbc_resume(struct device *dev)
 static void max77775_usbc_disable_irq(struct max77775_usbc_platform_data *usbc_data)
 {
 	disable_irq(usbc_data->irq_usbid);
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+	disable_irq(usbc_data->irq_taconn);
+#endif
 	disable_irq(usbc_data->irq_apcmd);
 	disable_irq(usbc_data->irq_sysmsg);
 	disable_irq(usbc_data->irq_vdm0);
@@ -4054,7 +4188,10 @@ static void max77775_usbc_shutdown(struct platform_device *pdev)
 	struct max77775_usbc_platform_data *usbc_data =
 		platform_get_drvdata(pdev);
 	u8 status = 0, uic_int = 0, vbus = 0;
-	u8 uid = 0, op_data = 0;
+	u8 uid = 0;
+#if defined(CONFIG_SUPPORT_SHIP_MODE)
+	u8 op_data = 0;
+#endif
 
 	msg_maxim("max77775 usbc driver shutdown++++");
 	if (!usbc_data->muic) {
@@ -4110,7 +4247,7 @@ static void max77775_usbc_shutdown(struct platform_device *pdev)
 			max77775_write_reg(usbc_data->muic, OPCODE_WRITE, 0x97); //auto ship mode
 			max77775_write_reg(usbc_data->muic, OPCODE_DATAOUT1, op_data);
 			max77775_write_reg(usbc_data->muic, OPCODE_WRITE_END, 0x00);
-			msleep(50); 
+			msleep(50);
 			max77775_read_reg(usbc_data->muic,
 				MAX77775_USBC_REG_UIC_INT, &uic_int);
 		}

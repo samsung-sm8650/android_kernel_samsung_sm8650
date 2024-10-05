@@ -336,8 +336,6 @@ int s2mpb03_recovery(struct s2mpb03_data *s2mpb03)
 			pr_info("%s: name(%s): max_uV(%d), min_uV(%d), always_on(%d), use_count(%d)\n",
 					__func__, rdev->constraints->name, rdev->constraints->max_uV,
 					rdev->desc->min_uV,	rdev->constraints->always_on, rdev->use_count);
-			// Make sure enabled registers are cleared
-			s2m_disable_regmap(rdev);
 
 			// Get and calculate voltage from regulator framework
 			vol = (rdev->constraints->min_uV - rdev->desc->min_uV) / rdev->desc->uV_step;
@@ -572,8 +570,7 @@ remove_pmic_device:
 	return -1;
 }
 #endif
-static int s2mpb03_pmic_probe(struct i2c_client *i2c,
-				const struct i2c_device_id *dev_id)
+static int __s2mpb03_pmic_probe(struct i2c_client *i2c)
 {
 	struct s2mpb03_dev *iodev;
 	struct s2mpb03_platform_data *pdata = i2c->dev.platform_data;
@@ -652,7 +649,7 @@ static int s2mpb03_pmic_probe(struct i2c_client *i2c,
 #if IS_ENABLED(CONFIG_REGULATOR_DEBUG_CONTROL)
 		ret = devm_regulator_debug_register(&i2c->dev, s2mpb03->rdev[i]);
 		if (ret)
-			dev_err(&i2c->dev, "failed to register debug regulator for %d, rc=%d\n",
+			dev_err(&i2c->dev, "failed to register debug regulator for %lu, rc=%d\n",
 					i, ret);
 #endif
 	}
@@ -678,6 +675,19 @@ static struct of_device_id s2mpb03_i2c_dt_ids[] = {
 	{ },
 };
 #endif /* CONFIG_OF */
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+static int s2mpb03_pmic_probe(struct i2c_client *i2c)
+{
+	return __s2mpb03_pmic_probe(i2c);
+}
+#else
+static int s2mpb03_pmic_probe(struct i2c_client *i2c,
+				const struct i2c_device_id *dev_id)
+{
+	return __s2mpb03_pmic_probe(i2c);
+}
+#endif
 
 static int __s2mpb03_pmic_remove(struct i2c_client *i2c)
 {

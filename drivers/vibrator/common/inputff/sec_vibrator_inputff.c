@@ -26,27 +26,6 @@
 #define __visible_for_testing static
 #endif
 
-enum compose_thread_state {
-	COMPOSE_STOP = 0,
-	COMPOSE_RUN = 1,
-	COMPOSE_START = 2,
-	COMPOSE_EXIT = 3,
-};
-
-struct common_inputff_effect {
-	int type;
-	int effect_id;
-	int scale;
-	int duration;
-	int frequency;
-};
-
-struct common_inputff_effects {
-	struct common_inputff_effect effects[MAX_COMPOSE_EFFECT];
-	int num_of_effects;
-	int repeat;
-};
-
 static struct sec_vib_inputff_pdata  sec_vib_inputff_pdata;
 
 static struct blocking_notifier_head sec_vib_inputff_nb_head =
@@ -112,11 +91,70 @@ int sec_vib_inputff_setbit(struct sec_vib_inputff_drvdata *ddata, int val)
 }
 EXPORT_SYMBOL_GPL(sec_vib_inputff_setbit);
 
-static int parsing_compose_effects(struct sec_vib_inputff_drvdata *ddata,
+static void configure_constant_effect(struct sec_vib_inputff_drvdata *ddata,
+		struct common_inputff_effect *inputff_effect, int index)
+{
+	if (!ddata || !inputff_effect)
+		return;
+
+	ddata->effects[index].gain = (ddata->effect_gain * inputff_effect->scale) / 100;
+	ddata->effects[index].compose_effects.type = inputff_effect->type;
+	ddata->effects[index].compose_effects.id = ddata->compose.compose_effect_id;
+	ddata->effects[index].compose_effects.replay.length = inputff_effect->duration;
+	ddata->effects[index].compose_effects.u.constant.level = inputff_effect->frequency;
+	pr_info("%s <%d> gain:%d type:%d duration:%d\n", __func__, index,
+		ddata->effects[index].gain, ddata->effects[index].compose_effects.type,
+		ddata->effects[index].compose_effects.replay.length);
+}
+
+static void configure_periodic_effect(struct sec_vib_inputff_drvdata *ddata,
+		struct common_inputff_effect *inputff_effect, int index)
+{
+	if (!ddata || !inputff_effect)
+		return;
+
+	ddata->effects[index].gain = (ddata->effect_gain * inputff_effect->scale) / 100;
+	ddata->effects[index].compose_effects.type = inputff_effect->type;
+	ddata->effects[index].compose_effects.id = ddata->compose.compose_effect_id;
+	ddata->effects[index].compose_effects.replay.length = inputff_effect->duration;
+	ddata->effects[index].compose_effects.u.periodic.offset = inputff_effect->effect_id;
+	ddata->effects[index].compose_effects.u.periodic.waveform = 0;
+	pr_info("%s <%d> gain:%d type:%d sep index:%d duration:%d\n", __func__, index,
+		ddata->effects[index].gain, ddata->effects[index].compose_effects.type,
+		ddata->effects[index].compose_effects.u.periodic.offset,
+		ddata->effects[index].compose_effects.replay.length);
+}
+
+static void configure_vib_free_duration(struct sec_vib_inputff_drvdata *ddata,
+		struct common_inputff_effect *inputff_effect, int index)
+{
+	if (!ddata || !inputff_effect)
+		return;
+
+	ddata->effects[index].compose_effects.type = 0;
+	ddata->effects[index].compose_effects.replay.length = inputff_effect->duration;
+	pr_info("%s <%d> type:%d duration:%d\n", __func__, index,
+		ddata->effects[index].compose_effects.type,
+		ddata->effects[index].compose_effects.replay.length);
+}
+
+__visible_for_testing int parsing_compose_effects(struct sec_vib_inputff_drvdata *ddata,
 		struct common_inputff_effects *input_effects)
 {
 	struct common_inputff_effect *inputff_effect;
 	int i = 0, ret = 0;
+
+	if (!ddata) {
+		ret = -ENOENT;
+		pr_err("%s ddata null\n", __func__);
+		goto err;
+	}
+
+	if (!input_effects) {
+		ret = -ENOENT;
+		pr_err("%s input_effects null\n", __func__);
+		goto err;
+	}
 
 	ddata->compose.num_of_compose_effects = input_effects->num_of_effects;
 	ddata->compose.compose_repeat = input_effects->repeat;
@@ -136,33 +174,13 @@ static int parsing_compose_effects(struct sec_vib_inputff_drvdata *ddata,
 
 		switch (inputff_effect->type) {
 		case FF_CONSTANT:
-			ddata->effects[i].gain = (ddata->effect_gain * inputff_effect->scale) / 100;
-			ddata->effects[i].compose_effects.type = inputff_effect->type;
-			ddata->effects[i].compose_effects.id = ddata->compose.compose_effect_id;
-			ddata->effects[i].compose_effects.replay.length = inputff_effect->duration;
-			ddata->effects[i].compose_effects.u.constant.level = inputff_effect->frequency;
-			pr_info("%s <%d> gain:%d type:%d duration:%d\n", __func__, i,
-				ddata->effects[i].gain, ddata->effects[i].compose_effects.type,
-				ddata->effects[i].compose_effects.replay.length);
+			configure_constant_effect(ddata, inputff_effect, i);
 			break;
 		case FF_PERIODIC:
-			ddata->effects[i].gain = (ddata->effect_gain * inputff_effect->scale) / 100;
-			ddata->effects[i].compose_effects.type = inputff_effect->type;
-			ddata->effects[i].compose_effects.id = ddata->compose.compose_effect_id;
-			ddata->effects[i].compose_effects.replay.length = inputff_effect->duration;
-			ddata->effects[i].compose_effects.u.periodic.offset = inputff_effect->effect_id;
-			ddata->effects[i].compose_effects.u.periodic.waveform = 0;
-			pr_info("%s <%d> gain:%d type:%d sep index:%d duration:%d\n", __func__, i,
-				ddata->effects[i].gain, ddata->effects[i].compose_effects.type,
-				ddata->effects[i].compose_effects.u.periodic.offset,
-				ddata->effects[i].compose_effects.replay.length);
+			configure_periodic_effect(ddata, inputff_effect, i);
 			break;
-		case 0:
-			ddata->effects[i].compose_effects.type = 0;
-			ddata->effects[i].compose_effects.replay.length = inputff_effect->duration;
-			pr_info("%s <%d> type:%d duration:%d\n", __func__, i,
-				ddata->effects[i].compose_effects.type,
-				ddata->effects[i].compose_effects.replay.length);
+		case VIB_FREE_DURATION:
+			configure_vib_free_duration(ddata, inputff_effect, i);
 			break;
 		default:
 			pr_err("%s invalid effect type=%d\n", __func__, inputff_effect->type);
@@ -170,6 +188,112 @@ static int parsing_compose_effects(struct sec_vib_inputff_drvdata *ddata,
 			goto err;
 		}
 	}
+err:
+	return ret;
+}
+
+__visible_for_testing void compose_effect_set_gain(struct input_dev *dev, u16 gain)
+{
+	struct sec_vib_inputff_drvdata *ddata = input_get_drvdata(dev);
+
+	pr_info("%s\n", __func__);
+
+	if (!ddata)
+		return;
+
+	if (ddata && ddata->vib_ops->set_gain)
+		ddata->vib_ops->set_gain(dev, gain);
+}
+
+__visible_for_testing int compose_effect_upload(struct input_dev *dev, struct ff_effect *effect)
+{
+	struct sec_vib_inputff_drvdata *ddata = input_get_drvdata(dev);
+	int ret = 0;
+
+	pr_info("%s\n", __func__);
+
+	if (!ddata || !effect) {
+		ret = -ENOENT;
+		goto err;
+	}
+
+	if (ddata && ddata->vib_ops->upload) {
+		ret = ddata->vib_ops->upload(dev, effect, NULL);
+		if (ret) {
+			pr_err("%s error. upload ret=%d\n", __func__, ret);
+			goto err;
+		}
+	}
+	ddata->compose.upload_partial_effect = 1;
+err:
+	return ret;
+}
+
+__visible_for_testing int compose_effect_playback_on(struct input_dev *dev,
+		struct ff_effect *effect)
+{
+	struct sec_vib_inputff_drvdata *ddata = input_get_drvdata(dev);
+	int ret = 0;
+
+	pr_info("%s\n", __func__);
+
+	if (!ddata || !effect) {
+		ret = -ENOENT;
+		goto err;
+	}
+
+	if (ddata && ddata->vib_ops->playback) {
+		ret = ddata->vib_ops->playback(dev, effect->id, 1);
+		if (ret)
+			pr_err("%s error. ret=%d\n", __func__, ret);
+	}
+err:
+	return ret;
+}
+
+__visible_for_testing int compose_effect_playback_off(struct input_dev *dev,
+		struct ff_effect *effect)
+{
+	struct sec_vib_inputff_drvdata *ddata = input_get_drvdata(dev);
+	int ret = 0;
+
+	pr_info("%s\n", __func__);
+
+	if (!ddata || !effect) {
+		ret = -ENOENT;
+		goto err;
+	}
+
+	if (ddata && ddata->vib_ops->playback) {
+		ret = ddata->vib_ops->playback(dev, effect->id, 0);
+		if (ret)
+			pr_err("%s error. ret=%d\n", __func__, ret);
+	}
+err:
+	return ret;
+}
+
+__visible_for_testing int compose_effect_erase(struct input_dev *dev, int effect_id)
+{
+	struct sec_vib_inputff_drvdata *ddata = input_get_drvdata(dev);
+	int ret = 0;
+
+	pr_info("%s\n", __func__);
+
+	if (!ddata) {
+		ret = -ENOENT;
+		goto err;
+	}
+
+	if (ddata->vib_ops->erase) {
+		ret = ddata->vib_ops->erase(dev, effect_id);
+		if (ret) {
+			pr_err("%s error. ret=%d\n", __func__, ret);
+			goto err;
+		}
+	}
+
+	ddata->compose.upload_partial_effect = 0;
 err:
 	return ret;
 }
@@ -183,9 +307,16 @@ static void compose_effects_play_work(struct kthread_work *work)
 	struct input_dev *dev = ddata->input;
 	struct ff_effect *effect = NULL;
 	u16 gain = 0;
-	int ret = 0, i = 0, type = 0, duration = 0;
+	int ret = 0, pattern_seq = 0, type = 0, duration = 0;
 
+	pr_info("%s start\n", __func__);
 	ddata->compose.thread_state = COMPOSE_START;
+
+	if (!dev) {
+		ret = -ENOENT;
+		pr_err("%s ddata->input null\n", __func__);
+		goto exit;
+	}
 
 	if (ddata->compose.num_of_compose_effects < 1) {
 		pr_err("%s error. ddata->compose.num_of_compose_effects=%d\n", __func__,
@@ -194,9 +325,9 @@ static void compose_effects_play_work(struct kthread_work *work)
 	}
 
 	while (!ddata->compose.thread_exit) {
-		gain = ddata->effects[i].gain;
-		effect = &ddata->effects[i].compose_effects;
-		type = ddata->effects[i].compose_effects.type;
+		gain = ddata->effects[pattern_seq].gain;
+		effect = &ddata->effects[pattern_seq].compose_effects;
+		type = ddata->effects[pattern_seq].compose_effects.type;
 		duration = effect->replay.length;
 
 		switch (type) {
@@ -204,58 +335,48 @@ static void compose_effects_play_work(struct kthread_work *work)
 		case FF_PERIODIC:
 			pr_info("%s type %s duration %dms\n", __func__,
 				(type == FF_CONSTANT) ? "FF_CONSTANT" : "FF_PERIODIC", duration);
-			if (ddata->vib_ops->set_gain)
-				ddata->vib_ops->set_gain(dev, gain);
 
-			if (ddata->compose.thread_exit) {
-				ddata->compose.compose_effect_id = -1;
-				break;
-			}
-
-			ret = ddata->vib_ops->upload(dev, effect, NULL);
-			if (ret) {
-				pr_err("%s error. upload ret=%d\n", __func__, ret);
-				ddata->compose.compose_effect_id = -1;
-				goto exit;
-			}
+			compose_effect_set_gain(dev, gain);
 
 			if (ddata->compose.thread_exit)
 				break;
 
-			if (ddata->vib_ops->playback)
-				ddata->vib_ops->playback(dev, effect->id, 1);
+			if (compose_effect_upload(dev, effect))
+				goto exit;
+
+			if (ddata->compose.thread_exit)
+				break;
+
+			compose_effect_playback_on(dev, effect);
 			break;
-		case 0:
+		case VIB_FREE_DURATION:
 			pr_info("%s delay duration %dms\n", __func__, duration);
 			break;
 		default:
 			pr_err("%s error. type=%d\n", __func__, type);
 			break;
 		}
+
 		wait_event_interruptible_timeout(ddata->compose.delay_wait,
 			ddata->compose.thread_exit, msecs_to_jiffies(duration));
 
-		if (type == FF_CONSTANT || type == FF_PERIODIC) {
-			if (ddata->vib_ops->playback)
-				ddata->vib_ops->playback(dev, effect->id, 0);
-		}
+		if (type == FF_CONSTANT || type == FF_PERIODIC)
+			compose_effect_playback_off(dev, effect);
 
 		if (ddata->compose.thread_exit)
 			break;
 
-		i++;
+		pattern_seq++;
 
-		if (i >= ddata->compose.num_of_compose_effects) {
+		if (pattern_seq >= ddata->compose.num_of_compose_effects) {
 			if (ddata->compose.compose_repeat)
-				i = 0;
+				pattern_seq = 0;
 			else
 				break;
 		}
 
-		if (type == FF_CONSTANT || type == FF_PERIODIC) {
-			if (ddata->vib_ops->erase)
-				ret = ddata->vib_ops->erase(dev, effect->id);
-		}
+		if (type == FF_CONSTANT || type == FF_PERIODIC)
+			compose_effect_erase(dev, effect->id);
 	}
 
 exit:
@@ -267,6 +388,10 @@ exit:
 static void stop_compose_effects_thread(struct sec_vib_inputff_drvdata *ddata)
 {
 	pr_info("%s\n", __func__);
+
+	if (!ddata)
+		return;
+
 	if (ddata->compose.compose_thread) {
 		if (ddata->compose.thread_state != COMPOSE_STOP) {
 			ddata->compose.thread_exit = 1;
@@ -275,36 +400,105 @@ static void stop_compose_effects_thread(struct sec_vib_inputff_drvdata *ddata)
 	}
 }
 
+__visible_for_testing bool check_common_inputff_compose_pattern(struct sec_vib_inputff_drvdata *ddata,
+		struct ff_effect *effect)
+{
+	if (!ddata || !effect)
+		return false;
+
+	if (ddata->use_common_inputff) {
+		if (effect->u.periodic.custom_len > sizeof(int))
+			return true;
+	}
+	return false;
+}
+
+__visible_for_testing bool uploaded_common_inputff_compose_pattern(struct sec_vib_inputff_drvdata *ddata)
+{
+	if (!ddata)
+		return false;
+
+	if (ddata->use_common_inputff) {
+		if (ddata->compose.upload_compose_effect)
+			return true;
+	}
+	return false;
+}
+
+static int process_common_inputff_compose_upload_effect(struct sec_vib_inputff_drvdata *ddata,
+		struct ff_effect *effect)
+{
+	struct common_inputff_effects input_compose_effects;
+	int ret = 0;
+
+	if (!ddata || !effect) {
+		ret = -ENOENT;
+		pr_err("%s ddata or effect null\n", __func__);
+		goto err;
+	}
+
+	if (copy_from_user(&input_compose_effects,
+			effect->u.periodic.custom_data,
+			sizeof(struct common_inputff_effects))) {
+		ret = -ENODATA;
+		goto err;
+	}
+	ddata->compose.compose_effect_id = effect->id;
+	ret = parsing_compose_effects(ddata, &input_compose_effects);
+	if (ret)
+		goto err;
+	ddata->compose.upload_compose_effect = 1;
+err:
+	return ret;
+}
+
+static void process_common_inputff_compose_erase(struct sec_vib_inputff_drvdata *ddata)
+{
+	if (!ddata)
+		return;
+
+	stop_compose_effects_thread(ddata);
+	kthread_flush_work(&ddata->compose.kwork);
+	ddata->compose.thread_state = COMPOSE_STOP;
+	ddata->compose.upload_compose_effect = 0;
+	ddata->compose.num_of_compose_effects = 0;
+	ddata->compose.compose_repeat = 0;
+	ddata->compose.compose_effect_id = -1;
+}
+
+static void process_common_inputff_compose_playback(struct sec_vib_inputff_drvdata *ddata,
+		int val)
+{
+	if (!ddata)
+		return;
+
+	if (val) {
+		ddata->compose.thread_exit = 0;
+		kthread_queue_work(&ddata->compose.kworker, &ddata->compose.kwork);
+		ddata->compose.thread_state = COMPOSE_RUN;
+	} else
+		stop_compose_effects_thread(ddata);
+}
+
 static int sec_vib_inputff_upload_effect(struct input_dev *dev,
 					 struct ff_effect *effect,
 					 struct ff_effect *old)
 {
 	struct sec_vib_inputff_drvdata *ddata = input_get_drvdata(dev);
-	struct common_inputff_effects input_compose_effects;
 	int ret = 0;
 
-	if (ddata->use_common_inputff) {
-		if (effect->u.periodic.custom_len > sizeof(int)) {
-			if (copy_from_user(&input_compose_effects,
-					effect->u.periodic.custom_data,
-					sizeof(struct common_inputff_effects))) {
-				ret = -ENODATA;
-				goto err;
-			}
-			ddata->compose.compose_effect_id = effect->id;
-			ret = parsing_compose_effects(ddata, &input_compose_effects);
-			if (ret)
-				goto err;
-			ddata->compose.upload_compose_effect = 1;
-		} else {
-			if (ddata->vib_ops->upload)
-				ret = ddata->vib_ops->upload(dev, effect, old);
-		}
+	if (!ddata) {
+		ret = -ENOENT;
+		pr_err("%s ddata null\n", __func__);
+		goto err;
+	}
+
+	if (check_common_inputff_compose_pattern(ddata, effect)) {
+		ret = process_common_inputff_compose_upload_effect(ddata, effect);
 	} else {
 		if (ddata->vib_ops->upload)
 			ret = ddata->vib_ops->upload(dev, effect, old);
 	}
-
 err:
 	return ret;
 }
@@ -314,24 +508,21 @@ static int sec_vib_inputff_erase(struct input_dev *dev, int effect_id)
 	struct sec_vib_inputff_drvdata *ddata = input_get_drvdata(dev);
 	int ret = 0;
 
-	if (ddata->use_common_inputff) {
-		if (ddata->compose.upload_compose_effect) {
-			stop_compose_effects_thread(ddata);
-			kthread_flush_work(&ddata->compose.kwork);
-			ddata->compose.thread_state = COMPOSE_STOP;
-			ddata->compose.upload_compose_effect = 0;
-			ddata->compose.num_of_compose_effects = 0;
-			ddata->compose.compose_repeat = 0;
-			if (ddata->compose.compose_effect_id == -1)
-				goto exit;
-			ddata->compose.compose_effect_id = -1;
-		}
-		if (ddata->vib_ops->erase)
-			ret = ddata->vib_ops->erase(dev, effect_id);
-	} else {
-		if (ddata->vib_ops->erase)
-			ret = ddata->vib_ops->erase(dev, effect_id);
+	if (!ddata) {
+		ret = -ENOENT;
+		pr_err("%s ddata null\n", __func__);
+		goto exit;
 	}
+
+	if (uploaded_common_inputff_compose_pattern(ddata)) {
+		process_common_inputff_compose_erase(ddata);
+		if (ddata->compose.upload_partial_effect == 0)
+			goto exit;
+	}
+
+	if (ddata->vib_ops->erase)
+		ret = ddata->vib_ops->erase(dev, effect_id);
+
 exit:
 	return ret;
 }
@@ -342,23 +533,19 @@ static int sec_vib_inputff_playback(struct input_dev *dev, int effect_id,
 	struct sec_vib_inputff_drvdata *ddata = input_get_drvdata(dev);
 	int ret = 0;
 
-	if (ddata->use_common_inputff) {
-		if (ddata->compose.upload_compose_effect) {
-			if (val) {
-				ddata->compose.thread_exit = 0;
-				kthread_queue_work(&ddata->compose.kworker, &ddata->compose.kwork);
-				ddata->compose.thread_state = COMPOSE_RUN;
-			} else
-				stop_compose_effects_thread(ddata);
-		} else {
-			if (ddata->vib_ops->playback)
-				ret = ddata->vib_ops->playback(dev, effect_id, val);
-		}
+	if (!ddata) {
+		ret = -ENOENT;
+		pr_err("%s ddata null\n", __func__);
+		goto err;
+	}
+
+	if (uploaded_common_inputff_compose_pattern(ddata)) {
+		process_common_inputff_compose_playback(ddata, val);
 	} else {
 		if (ddata->vib_ops->playback)
 			ret = ddata->vib_ops->playback(dev, effect_id, val);
 	}
-
+err:
 	return ret;
 }
 
@@ -366,9 +553,16 @@ static void sec_vib_inputff_set_gain(struct input_dev *dev, u16 gain)
 {
 	struct sec_vib_inputff_drvdata *ddata = input_get_drvdata(dev);
 
+	if (!ddata) {
+		pr_err("%s ddata null\n", __func__);
+		goto err;
+	}
+
 	ddata->effect_gain = gain;
 	if (ddata->vib_ops->set_gain)
 		ddata->vib_ops->set_gain(dev, gain);
+err:
+	return;
 }
 
 int sec_vib_inputff_register(struct sec_vib_inputff_drvdata *ddata)

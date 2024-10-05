@@ -724,7 +724,11 @@ static int __init qfsspi_init(void)
 		return status;
 	}
 
+#if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+	qfsspi_class = class_create(QFSSPI_DEV);
+#else
 	qfsspi_class = class_create(THIS_MODULE, QFSSPI_DEV);
+#endif
 	if (IS_ERR(qfsspi_class)) {
 		unregister_chrdev(QFSSPI_MAJOR, QFSSPI_DEV);
 		pr_err("%s: class_create failed\n", __func__);

@@ -18,13 +18,11 @@
 #include <linux/of_gpio.h>
 #include <linux/kfifo.h>
 #include <linux/poll.h>
-#include <linux/pinctrl/consumer.h>
 #include <linux/gpio.h>
 #include <linux/err.h>
 #include <linux/spi/spidev.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pinctrl/consumer.h>
-#include "../pinctrl/core.h"
 #include "fingerprint_common.h"
 
 #undef DISABLED_GPIO_PROTECTION

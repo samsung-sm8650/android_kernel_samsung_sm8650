@@ -89,6 +89,7 @@ static struct max77775_revision_struct max77775_revision[] = {
 	{ 0x75, 0x01, MAX77775_PASS1},	/* MD75 PASS1 */
 	{ 0x75, 0x02, MAX77775_PASS2},	/* MD75 PASS2 */
 	{ 0x75, 0x03, MAX77775_PASS3},	/* MD75 PASS3 */
+	{ 0x75, 0x04, MAX77775_PASS4},	/* MD75 PASS4 */
 };
 
 static struct mfd_cell max77775_devs[] = {
@@ -913,7 +914,7 @@ int max77775_usbc_fw_update(struct max77775_dev *max77775,
 			fw_header->minor, fw_header->id, fw_header->rev);
 
 	max77775_read_reg(max77775->i2c, MAX77775_PMIC_REG_PMICREV, &pmicrev);
-	if (max77775->required_hw_rev != (pmicrev & 0x3)) {
+	if (max77775->required_hw_rev != (pmicrev & 0x7)) {
 		md75_info_usb("%s: FW_SKIP: hw_rev mismatch. required_hw_rev=%x:pmicrev=%x\n",
 			__func__, max77775->required_hw_rev, pmicrev);
 		return 0;
@@ -957,6 +958,9 @@ retry:
 	max77775_write_reg(max77775->muic, REG_CC_INT_M, 0xFF);
 	max77775_write_reg(max77775->muic, REG_UIC_INT_M, 0xFF);
 	max77775_write_reg(max77775->muic, REG_VDM_INT_M, 0xFF);
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+	max77775_write_reg(max77775->muic, REG_SPARE_INT_M, 0xFF);
+#endif
 
 	offset = 0;
 	duration = 0;
@@ -992,6 +996,12 @@ retry:
 		(max77775->FW_Minor_Revision != fw_header->minor) ||
 		(max77775->FW_Product_ID != fw_header->id) ||
 		enforce_do) {
+
+		if (IS_ENABLED(CONFIG_SEC_FACTORY_INTERPOSER) && !enforce_do) {
+			md75_err_usb("%s: Skip fw update on secondary factory binary\n", __func__);
+			error = -EINVAL;
+			goto out;
+		}
 
 #if defined(CONFIG_SEC_FACTORY)
 		max77775_read_reg(max77775->muic, MAX77775_USBC_REG_USBC_STATUS1, &usbc_status1);

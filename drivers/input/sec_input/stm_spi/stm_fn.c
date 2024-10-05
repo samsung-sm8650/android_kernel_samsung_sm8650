@@ -1068,14 +1068,6 @@ void stm_ts_read_info_work(struct work_struct *work)
 
 	stm_ts_run_rawdata_all(ts);
 
-	/* read cmoffset & fail history data at booting time */
-	input_info(true, ts->dev, "%s: read cm data in tsp ic\n", __func__);
-	if (ts->plat_data->bringup == 0) {
-		get_cmoffset_dump(ts, ts->cmoffset_sdc_proc, OFFSET_FW_SDC);
-		get_cmoffset_dump(ts, ts->cmoffset_sub_proc, OFFSET_FW_SUB);
-		get_cmoffset_dump(ts, ts->cmoffset_main_proc, OFFSET_FW_MAIN);
-	}
-
 	ts->info_work_done = true;
 
 	/* reinit */

@@ -17,8 +17,19 @@
 #define ENCRYPT_CP_REGION	0x1
 #define CLEAR_CP_REGION		0x0
 
+/* kernel.sec_qc_debug.sec_cp_dbg_level */
+static unsigned int sec_cp_dbg_level __ro_after_init;
+module_param_named(cp_debug_level, sec_cp_dbg_level, uint, 0440);
+
 static unsigned int sec_qc_cp_dump_policy;
 module_param_named(cp_dump_policy, sec_qc_cp_dump_policy, uint, 0440);
+
+static bool sec_cp_debug_is_on(void)
+{
+	if (sec_cp_dbg_level == 0x55FF)
+		return false;
+	return true;
+}
 
 static int __cp_dump_encrypt_init_each(
 		const struct cp_dump_encrypt_entry *entry,
@@ -42,8 +53,8 @@ static int __cp_dump_encrypt_init_each(
 	}
 
 	debug_level = sec_debug_level();
-	if (debug_level == SEC_DEBUG_LEVEL_MID ||
-	    debug_level == SEC_DEBUG_LEVEL_HIGH)
+	if ((debug_level == SEC_DEBUG_LEVEL_MID ||
+		debug_level == SEC_DEBUG_LEVEL_HIGH) && sec_cp_debug_is_on())
 		policy = entry->mid_high;
 	else
 		policy = entry->low;

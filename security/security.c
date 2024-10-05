@@ -1715,6 +1715,22 @@ void security_cred_free(struct cred *cred)
 	cred->security = NULL;
 }
 
+#ifdef CONFIG_KDP_CRED
+void security_cred_free_hook(struct cred *cred)
+{
+	/*
+	 * There is a failure case in prepare_creds() that
+	 * may result in a call here with ->security being NULL.
+	 */
+	if (unlikely(cred == NULL || cred->security == NULL))
+		return;
+
+	BUG_ON(!is_kdp_protect_addr((unsigned long)cred));
+
+	call_void_hook(cred_free, cred);
+}
+#endif
+
 int security_prepare_creds(struct cred *new, const struct cred *old, gfp_t gfp)
 {
 	int rc = lsm_cred_alloc(new, gfp);

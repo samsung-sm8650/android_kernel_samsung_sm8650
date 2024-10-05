@@ -62,6 +62,7 @@ enum {
 	OPTION_TYPE_GET_LIGHT_DEVICE_ID,
 	OPTION_TYPE_GET_TRIM_CHECK,
 	OPTION_TYPE_GET_SUB_ALS_LUX,
+	OPTION_TYPE_GET_MAX_BRIGHTNESS,
 	OPTION_TYPE_MAX
 };
 
@@ -445,7 +446,7 @@ int light_panel_data_notify(struct notifier_block *nb,
 			return 0;
 
 		if (bl.level)
-			bl.level /= 10;
+			bl.level /= data->brightness_resolution[display_idx];
 
 		data->brightness_info[0] = bl.level;
 		data->brightness_info[1] = bl.aor;
@@ -1082,6 +1083,20 @@ void light_rect_init_work(void)
 }
 #endif
 
+void light_get_brightness_resolution(struct adsp_data *data, int max_br,
+	uint8_t display_idx)
+{
+	if (max_br >= 25500)
+		data->brightness_resolution[display_idx] = 100;
+	else if (max_br >= 2550)
+		data->brightness_resolution[display_idx] = 10;
+	else
+		data->brightness_resolution[display_idx] = 1;
+
+	pr_info("[SSC_FAC] %s: brightness resolution %d(%d)", __func__,
+		data->brightness_resolution[display_idx], display_idx);
+}
+
 void light_init_work_func(struct work_struct *work)
 {
 	struct adsp_data *data = container_of((struct delayed_work *)work,
@@ -1089,6 +1104,7 @@ void light_init_work_func(struct work_struct *work)
 #if IS_ENABLED(CONFIG_SUPPORT_BRIGHTNESS_NOTIFY_FOR_LIGHT_SENSOR) && \
 	IS_ENABLED(CONFIG_SEC_PANEL_NOTIFIER_V2)
 	int32_t msg_buf[4], i, light_idx, max_idx = 1;
+	int32_t cmd, cnt = 0;
 
 #if IS_ENABLED(CONFIG_SUPPORT_DUAL_OPTIC)
 	max_idx = 2;
@@ -1110,7 +1126,30 @@ void light_init_work_func(struct work_struct *work)
 			light_idx, 0, MSG_TYPE_OPTION_DEFINE);
 		mutex_unlock(&data->light_factory_mutex);
 
-		msleep(50);
+		msleep(25);
+
+		cmd = OPTION_TYPE_GET_MAX_BRIGHTNESS;
+		adsp_unicast(&cmd, sizeof(int32_t),
+			light_idx, 0, MSG_TYPE_SET_TEMPORARY_MSG);
+
+		while (!(data->ready_flag[MSG_TYPE_SET_TEMPORARY_MSG]
+			& 1 << light_idx) && cnt++ < TIMEOUT_CNT)
+			usleep_range(1000, 1100);
+
+		data->ready_flag[MSG_TYPE_SET_TEMPORARY_MSG] &= ~(1 << light_idx);
+		mutex_unlock(&data->light_factory_mutex);
+		if (cnt >= TIMEOUT_CNT) {
+			pr_err("[SSC_FAC] %s: Timeout!!!\n", __func__);
+		}
+
+		light_get_brightness_resolution(data, data->msg_buf[light_idx][0], i);
+
+		pr_info("[SSC_FAC] %s: max brightness %d(%d)\n", __func__,
+			data->msg_buf[light_idx][0], i);
+
+		cnt = 0;
+
+		msleep(25);
 	}
 #endif
 	light_get_device_id(data, MSG_LIGHT);
@@ -1131,6 +1170,8 @@ void light_init_work(struct adsp_data *data)
 	data->pre_display_idx = -1;
 	data->light_debug_info_cmd = 0;
 	data->light_factory_is_ready = true;
+	data->brightness_resolution[0] = 1;
+	data->brightness_resolution[1] = 1;
 
 	schedule_delayed_work(&data->light_init_work, msecs_to_jiffies(1000));
 }
@@ -1162,7 +1203,11 @@ void light_cal_read_work_func(struct work_struct *work)
 		mutex_unlock(&data->light_factory_mutex);
 		if (cnt >= TIMEOUT_CNT) {
 			pr_err("[SSC_FAC] %s: Timeout!!!\n", __func__);
-			return;
+#if IS_ENABLED(CONFIG_SUPPORT_DUAL_OPTIC)
+			light_idx = MSG_LIGHT_SUB;
+			cnt = 0;
+#endif
+			continue;
 		} else if (data->msg_buf[light_idx][0] < 0) {
 			pr_err("[SSC_FAC] %s: UB is not matched!!!(%d %d)\n", __func__,
 				light_idx, data->msg_buf[light_idx][0]);
@@ -1256,11 +1301,19 @@ static ssize_t light_cal_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct adsp_data *data = dev_get_drvdata(dev);
-	int32_t cmd = OPTION_TYPE_GET_LIGHT_CAL, cur_lux, cnt = 0;
+	int32_t cmd_buf[2] = {0, }, cur_lux, cnt = 0;
 	uint16_t light_idx = get_light_sidx(data);
+	uint16_t display_idx = (light_idx == MSG_LIGHT) ? 0 : 1;
 
 	mutex_lock(&data->light_factory_mutex);
-	adsp_unicast(&cmd, sizeof(int32_t), light_idx,
+
+	pr_info("[SSC_FAC] %s: br: %d (idx: %u)\n", __func__,
+		data->pre_bl_level[display_idx], display_idx);
+
+	cmd_buf[0] = OPTION_TYPE_GET_LIGHT_CAL;
+	cmd_buf[1] = data->pre_bl_level[display_idx];
+
+	adsp_unicast(cmd_buf, sizeof(cmd_buf), light_idx,
 		0, MSG_TYPE_GET_CAL_DATA);
 
 	while (!(data->ready_flag[MSG_TYPE_GET_CAL_DATA]
@@ -1298,9 +1351,10 @@ static ssize_t light_cal_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size)
 {
 	struct adsp_data *data = dev_get_drvdata(dev);
-	int32_t cmd = OPTION_TYPE_GET_LIGHT_CAL, new_value, cnt = 0;
+	int32_t cmd_buf[2] = {0, }, new_value, cnt = 0;
 	int32_t msg_buf[5] = {0, };
 	uint16_t light_idx = get_light_sidx(data);
+	uint16_t display_idx = (light_idx == MSG_LIGHT) ? 0 : 1;
 
 	if (sysfs_streq(buf, "0"))
 		new_value = 0;
@@ -1309,11 +1363,16 @@ static ssize_t light_cal_store(struct device *dev,
 	else
 		return size;
 
-	pr_info("[SSC_FAC] %s: cmd: %d\n", __func__, new_value);
+	pr_info("[SSC_FAC] %s: cmd: %d, br: %d (idx: %u)\n", __func__,
+		new_value, data->pre_bl_level[display_idx], display_idx);
+
 	mutex_lock(&data->light_factory_mutex);
 
 	if (new_value == 1) {
-		adsp_unicast(&cmd, sizeof(cmd), light_idx, 0,
+		cmd_buf[0] = OPTION_TYPE_GET_LIGHT_CAL;
+		cmd_buf[1] = data->pre_bl_level[display_idx];
+
+		adsp_unicast(cmd_buf, sizeof(cmd_buf), light_idx, 0,
 			MSG_TYPE_GET_CAL_DATA);
 
 		while (!(data->ready_flag[MSG_TYPE_GET_CAL_DATA]
@@ -1435,14 +1494,9 @@ static ssize_t light_test_show(struct device *dev,
 
 static DEVICE_ATTR(light_test, 0444, light_test_show, NULL);
 #elif defined (CONFIG_TABLET_MODEL_CONCEPT)
-static ssize_t light_cal_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
+void light_cal_data(struct adsp_data *data, int light_idx, int *max_als, int *cur_lux)
 {
-	struct adsp_data *data = dev_get_drvdata(dev);
-	int32_t cmd = OPTION_TYPE_GET_LIGHT_CAL, cur_lux, max_als = 0, cnt = 0;
-	uint16_t light_idx = get_light_sidx(data);
-
-	mutex_lock(&data->light_factory_mutex);
+	int32_t cmd = OPTION_TYPE_GET_LIGHT_CAL, cnt = 0;
 	adsp_unicast(&cmd, sizeof(int32_t), light_idx,
 		0, MSG_TYPE_GET_CAL_DATA);
 
@@ -1451,20 +1505,43 @@ static ssize_t light_cal_show(struct device *dev,
 		usleep_range(1000, 1100);
 
 	data->ready_flag[MSG_TYPE_GET_CAL_DATA] &= ~(1 << light_idx);
-
-	mutex_unlock(&data->light_factory_mutex);
 	if (cnt >= TIMEOUT_CNT) {
-		pr_err("[SSC_FAC] %s: Timeout!!!\n", __func__);
-		cur_lux = -1;
+		pr_err("[SSC_FAC] %s - %d : Timeout!!!\n", __func__, light_idx);
+		*cur_lux = -1;
 	} else {
-		max_als = data->msg_buf[light_idx][1];
-		cur_lux = data->msg_buf[light_idx][2];
+		*max_als = data->msg_buf[light_idx][1];
+		*cur_lux = data->msg_buf[light_idx][2];
 	}
-
-	return snprintf(buf, PAGE_SIZE, "%d,%d,%d\n",
-		1, max_als, cur_lux);
 }
+static ssize_t light_cal_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct adsp_data *data = dev_get_drvdata(dev);
+	int32_t cur_lux, max_als = 0;
+	int32_t cur_lux_sub = 0, max_als_sub = 0;
+	uint16_t light_idx = 0;
 
+	if (data->fac_fstate == LIGHT_DUAL_CHECK_MODE) {
+		mutex_lock(&data->light_factory_mutex);
+
+		light_cal_data(data, MSG_LIGHT, &max_als, &cur_lux);
+		light_cal_data(data, MSG_LIGHT_SUB, &max_als_sub, &cur_lux_sub);
+
+		mutex_unlock(&data->light_factory_mutex);
+		return snprintf(buf, PAGE_SIZE, "%d,%d,%d,%d,%d,%d\n",
+			1, max_als, cur_lux, 1, max_als_sub, cur_lux_sub);
+
+	} else {
+		mutex_lock(&data->light_factory_mutex);
+
+		light_idx = get_light_sidx(data);
+		light_cal_data(data, light_idx, &max_als, &cur_lux);
+
+		mutex_unlock(&data->light_factory_mutex);
+		return snprintf(buf, PAGE_SIZE, "%d,%d,%d\n",
+			1, max_als, cur_lux);
+	}
+}
 static ssize_t light_cal_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size)
 {

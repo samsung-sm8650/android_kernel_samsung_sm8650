@@ -450,11 +450,15 @@ EXPORT_SYMBOL(max77775_set_fw_noautoibus);
 
 void max77775_set_shipmode_op(int enable, u8 data)
 {
+#if defined(CONFIG_SUPPORT_SHIP_MODE)
 	g_usbc_data->ship_mode_en = (enable ? 1 : 0);
 	g_usbc_data->ship_mode_data = data;
 
 	md75_info_usb("%s : enable(%d) data(0x%x)\n",
 		__func__, enable, data);
+#else
+	md75_info_usb("%s Not supported\n", __func__);
+#endif
 }
 EXPORT_SYMBOL(max77775_set_shipmode_op);
 
@@ -462,7 +466,7 @@ void max77775_usb_id_set(u8 mode)
 {
 	usbc_cmd_data write_data;
 	struct max77775_muic_data *muic_data;
-	
+
 	if (g_usbc_data && g_usbc_data->muic_data) {
 		muic_data = g_usbc_data->muic_data;
 		disable_irq(muic_data->irq_vbadc);
@@ -502,7 +506,7 @@ void max77775_bypass_maintain(void)
 {
 	usbc_cmd_data value;
 	u8 op_data = 0x00;
-	
+
 	init_usbc_cmd_data(&value);
 	value.opcode = OPCODE_BYPASS_MTN;
 	value.write_data[0] = op_data;
@@ -620,8 +624,10 @@ void max77775_vbus_turn_on_ctrl(struct max77775_usbc_platform_data *usbc_data, b
 	bool must_block_host = 0;
 	static int reserve_booster;
 
+#ifdef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
 	if (o_notify)
 		must_block_host = is_blocked(o_notify, NOTIFY_BLOCK_TYPE_HOST);
+#endif
 
 	md75_info_usb("%s : enable=%d, auto_vbus_en=%d, must_block_host=%d, swaped=%d\n",
 		__func__, enable, usbc_data->auto_vbus_en, must_block_host, swaped);
@@ -1300,6 +1306,7 @@ static void max77775_pd_check_pdmsg(struct max77775_usbc_platform_data *usbc_dat
 		if (psy_charger) {
 			val.intval = 0;
 			psy_do_property("max77775-charger", set, POWER_SUPPLY_EXT_PROP_CHGINSEL, val);
+			psy_do_property("max77775-charger", set, POWER_SUPPLY_EXT_PROP_PRSWAP, val);
 		} else {
 			md75_err_usb("%s: Fail to get psy charger\n", __func__);
 		}

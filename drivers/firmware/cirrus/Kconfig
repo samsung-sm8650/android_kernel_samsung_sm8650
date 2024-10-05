@@ -4,6 +4,7 @@ config CS_DSP
 	tristate
 	default n
 
+# SPDX-License-Identifier: GPL-2.0-only
 comment "Cirrus firmware configs"
 
 config CIRRUS_FIRMWARE_CL_DSP

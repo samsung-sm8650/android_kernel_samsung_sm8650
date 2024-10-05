@@ -19,12 +19,14 @@
  ******************************************************************************/
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
+#include <linux/of_platform.h>
 #include <linux/delay.h>
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>
 #if IS_ENABLED(CONFIG_SAMSUNG_NFC)
 #include <linux/regulator/consumer.h>
+#include <linux/pinctrl/consumer.h>
 #ifdef CONFIG_NFC_SN2XX_ESE_SUPPORT
 #include "p73.h"
 #endif
@@ -43,6 +45,29 @@ static bool g_is_nfc_pvdd_enabled;
 enum lpm_status nfc_get_lpcharge(void)
 {
 	return nfc_param_lpcharge;
+}
+
+void nfc_set_i2c_pinctrl(struct device *dev, char *pinctrl_name)
+{
+	struct device_node *np = dev->of_node;
+	struct device_node *i2c_np = of_get_parent(np);
+	struct platform_device *i2c_pdev;
+	struct pinctrl *pinctrl_i2c;
+
+	i2c_pdev = of_find_device_by_node(i2c_np);
+	if (!i2c_pdev) {
+		NFC_LOG_ERR("i2c pdev not found\n");
+		return;
+	}
+
+	pinctrl_i2c = devm_pinctrl_get_select(&i2c_pdev->dev, pinctrl_name);
+
+	if (IS_ERR_OR_NULL(pinctrl_i2c)) {
+		NFC_LOG_ERR("No %s pinctrl %ld\n", pinctrl_name, PTR_ERR(pinctrl_i2c));
+	} else {
+		devm_pinctrl_put(pinctrl_i2c);
+		NFC_LOG_INFO("%s pinctrl done\n", pinctrl_name);
+	}
 }
 #endif
 
@@ -176,6 +201,12 @@ int nfc_parse_dt(struct device *dev, struct platform_configs *nfc_configs,
 	} else {
 		NFC_LOG_INFO("LDO nfc_pvdd: %pK, vol:%d\n",
 				nfc_configs->nfc_pvdd, regulator_get_voltage(nfc_configs->nfc_pvdd));
+	}
+
+	if (of_property_read_bool(np, "pn547,always_on_pvdd")) {
+		/* set late_pvdd_en to true so that nfc_en reset can be called in nfc_power_control */
+		nfc_configs->late_pvdd_en = true;
+		nfc_set_i2c_pinctrl(dev, "i2c_pull_up");
 	}
 
 	if (of_find_property(np, "clocks", NULL)) {
@@ -378,6 +409,7 @@ void nfc_power_control(struct nfc_dev *nfc_dev)
 	if (ret < 0)
 		NFC_LOG_ERR("%s pn547 regulator_on fail err = %d\n", __func__, ret);
 
+	nfc_set_i2c_pinctrl(&nfc_dev->i2c_dev.client->dev, "i2c_pull_up");
 #ifdef CONFIG_NFC_SN2XX_ESE_SUPPORT
 	ese_set_spi_pinctrl_for_ese_off(NULL);
 #endif
@@ -396,16 +428,26 @@ static int nfc_ocp_notifier(struct notifier_block *nb, unsigned long event, void
 	return NOTIFY_OK;
 }
 
+#if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+static ssize_t nfc_support_show(const struct class *class,
+		const struct class_attribute *attr, char *buf)
+#else
 static ssize_t nfc_support_show(struct class *class,
 		struct class_attribute *attr, char *buf)
+#endif
 {
 	NFC_LOG_INFO("\n");
 	return 0;
 }
 static CLASS_ATTR_RO(nfc_support);
 
+#if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+static ssize_t pvdd_store(const struct class *class,
+	const struct class_attribute *attr, const char *buf, size_t size)
+#else
 static ssize_t pvdd_store(struct class *class,
 	struct class_attribute *attr, const char *buf, size_t size)
+#endif
 {
 	struct nfc_dev *nfc_dev = g_nfc_dev;
 	struct platform_configs *nfc_configs;
@@ -433,8 +475,13 @@ static ssize_t pvdd_store(struct class *class,
 static CLASS_ATTR_WO(pvdd);
 
 #ifdef CONFIG_SAMSUNG_NFC_DEBUG
+#if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+static ssize_t check_show(const struct class *class,
+		const struct class_attribute *attr, char *buf)
+#else
 static ssize_t check_show(struct class *class,
 		struct class_attribute *attr, char *buf)
+#endif
 {
 	struct nfc_dev *nfc_dev = g_nfc_dev;
 	char *cmd = nfc_dev->write_kbuf;
@@ -489,8 +536,13 @@ end:
 #ifdef FEATURE_SEC_NFC_TEST
 extern void nfc_check_is_core_reset_ntf(u8 *data, int len);
 #endif
+#if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+static ssize_t check_store(const struct class *class,
+	const struct class_attribute *attr, const char *buf, size_t size)
+#else
 static ssize_t check_store(struct class *class,
 	struct class_attribute *attr, const char *buf, size_t size)
+#endif
 {
 	if (size > 0) {
 		if (buf[0] == '1') {
@@ -559,7 +611,11 @@ int nfc_misc_register(struct nfc_dev *nfc_dev,
 			ret);
 		return ret;
 	}
+#if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+	nfc_dev->nfc_class = class_create(classname);
+#else
 	nfc_dev->nfc_class = class_create(THIS_MODULE, classname);
+#endif
 	if (IS_ERR(nfc_dev->nfc_class)) {
 		ret = PTR_ERR(nfc_dev->nfc_class);
 		NFC_LOG_ERR("%s: failed to register device class ret %d\n", __func__,

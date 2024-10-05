@@ -25,7 +25,7 @@
 #include <linux/sec_class.h>
 #include "adsp.h"
 
-static u8 msg_size[MSG_SENSOR_MAX] = {		
+static u8 msg_size[MSG_SENSOR_MAX] = {
 	MSG_ACCEL_MAX,
 	MSG_GYRO_MAX,
 	MSG_MAG_MAX,
@@ -71,6 +71,9 @@ static u8 msg_size[MSG_SENSOR_MAX] = {
 #endif
 #if IS_ENABLED(CONFIG_SUPPORT_LIGHT_MAIN2_SENSOR) || defined(CONFIG_SUPPORT_LIGHT_MAIN2_SENSOR)
 	MSG_TYPE_SIZE_ZERO,
+#endif
+#if IS_ENABLED(CONFIG_BACKTAP_FACTORY) || defined(CONFIG_BACKTAP_FACTORY)
+	MSG_BACKTAP_MAX,
 #endif
 	MSG_TYPE_SIZE_ZERO,
 	MSG_COMMON_INFO_MAX,
@@ -205,6 +208,11 @@ int adsp_factory_register(unsigned int type,
 #if IS_ENABLED(CONFIG_FLIP_COVER_DETECTOR_FACTORY)
 	case MSG_FLIP_COVER_DETECTOR:
 		dev_name = "flip_cover_detector_sensor";
+		break;
+#endif
+#if IS_ENABLED(CONFIG_BACKTAP_FACTORY)
+	case MSG_BACKTAP:
+		dev_name = "backtap_sensor";
 		break;
 #endif
 	case MSG_SSC_CORE:
@@ -380,7 +388,7 @@ static int process_received_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	/* check the boundary to prevent memory attack */
 	if (msg_type >= MSG_TYPE_MAX || sensor_type >= MSG_SENSOR_MAX ||
 		nlh->nlmsg_len - (int32_t)sizeof(struct nlmsghdr) >
-	    	sizeof(int32_t) * msg_size[sensor_type]) {
+		sizeof(int32_t) * msg_size[sensor_type]) {
 		pr_err("[FACTORY] %s %d, %d, %d\n", __func__, msg_type, sensor_type, nlh->nlmsg_len);
 		return 0;
 	}
@@ -493,6 +501,9 @@ static int __init factory_adsp_init(void)
 #if IS_ENABLED(CONFIG_FLIP_COVER_DETECTOR_FACTORY)
 	mutex_init(&data->flip_cover_factory_mutex);
 #endif
+#if IS_ENABLED(CONFIG_BACKTAP_FACTORY)
+	mutex_init(&data->backtap_factory_mutex);
+#endif
 #if IS_ENABLED(CONFIG_SUPPORT_AK09973)
 	mutex_init(&data->digital_hall_mutex);
 	INIT_DELAYED_WORK(&data->dhall_cal_work, dhall_cal_work_func);
@@ -545,6 +556,9 @@ static int __init factory_adsp_init(void)
 #elif IS_ENABLED(CONFIG_PRESSURE_FACTORY)
 	pressure_factory_init();
 #endif
+#if IS_ENABLED(CONFIG_BACKTAP_FACTORY)
+	backtap_factory_init();
+#endif
 #if IS_ENABLED(CONFIG_LIGHT_FACTORY)
 	light_factory_init();
 #endif
@@ -589,6 +603,9 @@ static void __exit factory_adsp_exit(void)
 #elif IS_ENABLED(CONFIG_PRESSURE_FACTORY)
 	pressure_factory_exit();
 #endif
+#if IS_ENABLED(CONFIG_BACKTAP_FACTORY)
+	backtap_factory_exit();
+#endif
 #if IS_ENABLED(CONFIG_LIGHT_FACTORY)
 	cancel_delayed_work_sync(&data->light_init_work);
 	light_factory_exit();
@@ -616,6 +633,9 @@ static void __exit factory_adsp_exit(void)
 #endif
 #if IS_ENABLED(CONFIG_FLIP_COVER_DETECTOR_FACTORY)
 	mutex_destroy(&data->flip_cover_factory_mutex);
+#endif
+#if IS_ENABLED(CONFIG_BACKTAP_FACTORY)
+	mutex_destroy(&data->backtap_factory_mutex);
 #endif
 #if IS_ENABLED(CONFIG_SUPPORT_AK09973)
 	mutex_destroy(&data->digital_hall_mutex);

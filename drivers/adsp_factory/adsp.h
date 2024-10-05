@@ -98,6 +98,9 @@ struct adsp_data {
 #if IS_ENABLED(CONFIG_FLIP_COVER_DETECTOR_FACTORY)
 	struct mutex flip_cover_factory_mutex;
 #endif
+#if IS_ENABLED(CONFIG_BACKTAP_FACTORY)
+	struct mutex backtap_factory_mutex;
+#endif
 #if IS_ENABLED(CONFIG_SUPPORT_AK09973)
 	struct mutex digital_hall_mutex;
 #endif
@@ -143,6 +146,7 @@ struct adsp_data {
 	int32_t pre_display_idx;
 	int32_t light_debug_info_cmd;
 	int32_t hyst[4];
+	int32_t brightness_resolution[2];
 #endif
 #if IS_ENABLED(CONFIG_SUPPORT_PROX_CALIBRATION)
 	int32_t prox_cal;
@@ -261,6 +265,11 @@ void sns_flip_init_work(void);
 #endif
 #ifdef CONFIG_VBUS_NOTIFIER
 void sns_vbus_init_work(void);
+#endif
+
+#if IS_ENABLED(CONFIG_BACKTAP_FACTORY)
+int backtap_factory_init(void);
+void backtap_factory_exit(void);
 #endif
 
 #if IS_ENABLED(CONFIG_FLIP_COVER_DETECTOR_FACTORY)

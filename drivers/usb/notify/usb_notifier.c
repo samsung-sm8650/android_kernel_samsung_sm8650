@@ -31,6 +31,9 @@
 #endif
 
 #include <linux/battery/sec_battery_common.h>
+#if IS_ENABLED(CONFIG_COMBO_REDRIVER_PS5169)
+#include <linux/combo_redriver/ps5169.h>
+#endif
 #include "usb_notifier.h"
 
 
@@ -121,6 +124,10 @@ static int ccic_usb_handle_notification(struct notifier_block *nb,
 	case USB_STATUS_NOTIFY_ATTACH_DFP:
 		pr_info("%s: Turn On Host(DFP), max speed restrict = %d\n", __func__, usb_status.sub3);
 
+//UFP = 0, DFP = 1
+#if IS_ENABLED(CONFIG_COMBO_REDRIVER_PS5169)
+		ps5169_config(USB_ONLY_MODE, 1);
+#endif
 		dwc3_max_speed_setting(usb_status.sub3);
 		send_otg_notify(o_notify, NOTIFY_EVENT_HOST, 1);
 		pdata->is_host = 1;
@@ -129,8 +136,10 @@ static int ccic_usb_handle_notification(struct notifier_block *nb,
 		pr_info("%s: Turn On Device(UFP)\n", __func__);
 		dwc3_max_speed_setting(usb_status.sub3);
 		send_otg_notify(o_notify, NOTIFY_EVENT_VBUS, 1);
+#ifdef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
 		if (is_blocked(o_notify, NOTIFY_BLOCK_TYPE_CLIENT))
 			return -EPERM;
+#endif
 		break;
 	case USB_STATUS_NOTIFY_DETACH:
 		if (pdata->is_host) {
@@ -141,6 +150,9 @@ static int ccic_usb_handle_notification(struct notifier_block *nb,
 			pr_info("%s: Turn Off Device(UFP)\n", __func__);
 			send_otg_notify(o_notify, NOTIFY_EVENT_VBUS, 0);
 		}
+#if IS_ENABLED(CONFIG_COMBO_REDRIVER_PS5169)
+		ps5169_config(CLEAR_STATE, 0);
+#endif
 		break;
 	default:
 		pr_info("%s: unsupported DRP type : %d.\n", __func__, usb_status.drp);
@@ -383,6 +395,10 @@ static int qcom_set_host(bool enable)
 
 static int qcom_set_peripheral(bool enable)
 {
+#if IS_ENABLED(CONFIG_COMBO_REDRIVER_PS5169)
+	if (enable)
+		ps5169_config(USB_ONLY_MODE, 0);
+#endif
 	dwc_msm_vbus_event(enable);
 	return 0;
 }
@@ -508,7 +524,11 @@ static struct otg_notify sec_otg_notify = {
 	.is_host_wakelock = 0,
 	.is_wakelock = 1,
 	.unsupport_host = 0,
+#if IS_ENABLED(CONFIG_COMBO_REDRIVER_PS5169)
+	.booting_delay_sec = 16,
+#else
 	.booting_delay_sec = 10,
+#endif
 #if !IS_ENABLED(CONFIG_PDIC_NOTIFIER)
 	.auto_drive_vbus = NOTIFY_OP_PRE,
 #endif

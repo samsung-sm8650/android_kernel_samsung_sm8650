@@ -1233,8 +1233,6 @@ static int stm_ts_hw_init(struct stm_ts_data *ts)
 
 	input_info(true, ts->dev, "%s: Initialized\n", __func__);
 
-	stm_ts_init_proc(ts);
-
 	return ret;
 }
 
@@ -1373,8 +1371,6 @@ void stm_ts_release(struct stm_ts_data *ts)
 	cancel_delayed_work_sync(&ts->check_rawdata);
 	sec_input_dumpkey_unregister(MULTI_DEV_NONE);
 #endif
-	stm_ts_fn_remove(ts);
-
 	wakeup_source_unregister(ts->plat_data->sec_ws);
 
 	ts->plat_data->lowpower_mode = false;
@@ -1492,6 +1488,10 @@ int stm_ts_probe(struct device *dev)
 
 int stm_ts_remove(struct stm_ts_data *ts)
 {
+	if (!ts->probe_done) {
+		input_info(true, ts->dev, "%s don't success probe yet\n", __func__);
+		return 0;
+	}
 	input_info(true, ts->dev, "%s\n", __func__);
 
 #if !IS_ENABLED(CONFIG_SAMSUNG_PRODUCT_SHIP) && IS_ENABLED(CONFIG_TOUCHSCREEN_STM_SPI)
@@ -1504,6 +1504,7 @@ int stm_ts_remove(struct stm_ts_data *ts)
 	sec_input_probe_work_remove(ts->plat_data);
 	disable_irq_nosync(ts->irq);
 	stm_ts_release(ts);
+	stm_ts_fn_remove(ts);
 
 	return 0;
 }

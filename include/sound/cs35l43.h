@@ -166,6 +166,11 @@ bool cs35l43_volatile_reg(struct device *dev, unsigned int reg);
 int cs35l43_suspend_runtime(struct device *dev);
 int cs35l43_resume_runtime(struct device *dev);
 
+int cs35l43_sys_suspend(struct device *dev);
+int cs35l43_sys_suspend_noirq(struct device *dev);
+int cs35l43_sys_resume(struct device *dev);
+int cs35l43_sys_resume_noirq(struct device *dev);
+
 extern const struct dev_pm_ops cs35l43_pm_ops;
 extern const struct reg_default cs35l43_reg[CS35L43_NUM_DEFAULTS];
 

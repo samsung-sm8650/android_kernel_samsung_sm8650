@@ -302,6 +302,13 @@ config SUPPORT_LIGHT_SEAMLESS
 	help
 	  Support Light seamless.
 
+config BACKTAP_FACTORY
+	bool "factory test for SSC - Back Tap Sensor"
+	depends on ADSP_FACTORY
+	help
+	  backtap factory driver.
+	  provide sysfs for setting back tap peak threshold
+
 config FLIP_COVER_DETECTOR_FACTORY
 	bool "factory test for SSC - Flip Cover Detector"
 	depends on ADSP_FACTORY
@@ -318,13 +325,13 @@ config FLIP_COVER_DETECTOR_NOTIFIER
 
 config SSC_WAKEUP_DEBUG
 	bool "debug to ap wakeup due to SSC"
-	depends on SENSORS_SSC
+	depends on SEC_SENSORS_SSC
 	help
 	  debug to ap wakeup due to SSC event frequently
 
 config SLPI_LOADING_FAILURE_DEBUG
 	bool "debug to slpi loading fail"
-	depends on SENSORS_SSC
+	depends on SEC_SENSORS_SSC
 	help
 	  debug to to slpi loading fail
 
@@ -333,3 +340,9 @@ config SUPPORT_REF_ANGLE_WITHOUT_DIGITAL_HALL
 	depends on ADSP_FACTORY
 	help
 	  support ref angle without digital hall
+
+config SEC_SENSORS_RECOVERY
+	bool "recovery slpi or adsp for sensor"
+	depends on SEC_SENSORS_SSC
+	help
+	  recovery to slpi or adsp for sensor

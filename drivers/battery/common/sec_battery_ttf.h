@@ -31,6 +31,7 @@ struct sec_battery_info;
 struct sec_ttf_data {
 	void *pdev;
 	int timetofull;
+	int old_timetofull;
 
 	unsigned int ttf_hv_12v_charge_current;
 	unsigned int ttf_hv_charge_current;

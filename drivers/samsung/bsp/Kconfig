@@ -3,7 +3,6 @@ config SEC_FACTORY
 	bool "when it comes to sec factory mode"
 	default n
 	select SEC_PANIC_PCIE_ERR
-	select SEC_PCIE_KEEP_LINKBW
 	help
 	  It will support a sec factory mode
 endmenu

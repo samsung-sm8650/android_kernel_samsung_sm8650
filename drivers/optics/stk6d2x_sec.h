@@ -15,6 +15,7 @@
 
 #include <stk6d2x.h>
 #include <common_define.h>
+#include <linux/version.h>
 
 // #define SUPPORT_SENSOR_CLASS
 

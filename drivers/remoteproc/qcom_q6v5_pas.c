@@ -37,9 +37,14 @@
 #include <trace/hooks/remoteproc.h>
 #include <linux/iopoll.h>
 
+#ifdef HDM_SUPPORT
+#include <linux/hdm.h>
+#endif
 #if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
 #include <linux/time.h>
 #include <linux/ktime.h>
+#include <linux/of_gpio.h>
+#include <linux/gpio.h>
 #endif
 #include "qcom_common.h"
 #include "qcom_pil_info.h"
@@ -71,7 +76,9 @@ static int subsensor_supply_reg_idx = -1;
 static int prox_vdd_reg_idx = -1;
 static int prox_vdd_retry_cnt;
 static int subsensor_vdd_retry_cnt;
-static u64 reg_init_first_ts;
+static bool set_subsensor_vdd_done;
+static bool is_need_subsensor;
+static bool is_need_subvdd_disable;
 #endif
 
 #define to_rproc(d) container_of(d, struct rproc, dev)
@@ -794,8 +801,8 @@ static int adsp_start(struct rproc *rproc)
 	if (adsp->dtb_pas_id || adsp->dtb_fw_name) {
 		ret = qcom_scm_pas_auth_and_reset(adsp->dtb_pas_id);
 		if (ret)
-			panic("Panicking, auth and reset failed for remoteproc %s dtb ret=%d\n",
-				rproc->name, ret);
+			panic("Panicking, auth and reset failed for remoteproc %s dtb\n",
+				 rproc->name);
 	}
 
 	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_firmware_loading", "enter");
@@ -815,9 +822,18 @@ static int adsp_start(struct rproc *rproc)
 	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_auth_reset", "enter");
 
 	ret = qcom_scm_pas_auth_and_reset(adsp->pas_id);
+#ifdef HDM_SUPPORT
+	if (ret) {
+		// Intentionally block cp load.
+		if (hdm_is_cp_enabled())
+			goto free_metadata;
+		else
+			panic("Panicking, auth and reset failed for remoteproc %s\n", rproc->name);
+	}
+#else
 	if (ret)
-		panic("Panicking, auth and reset failed for remoteproc %s ret=%d\n",
-				rproc->name, ret);
+		panic("Panicking, auth and reset failed for remoteproc %s\n", rproc->name);
+#endif
 	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_auth_reset", "exit");
 
 	/* if needed, signal Q6 to continute booting */
@@ -1073,12 +1089,7 @@ static void qcom_pas_handover(struct qcom_q6v5 *q6v5)
 		else
 			dev_info(adsp->dev, "state changed in handover for soccp!\n");
 	}
-#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
-	if (strcmp(adsp->rproc->name, "adsp"))
-		disable_regulators(adsp);
-#else
 	disable_regulators(adsp);
-#endif
 	clk_disable_unprepare(adsp->aggre2_clk);
 	clk_disable_unprepare(adsp->xo);
 	adsp_pds_disable(adsp, adsp->proxy_pds, adsp->proxy_pd_count);
@@ -1314,6 +1325,30 @@ static int adsp_init_clock(struct qcom_adsp *adsp)
 	return 0;
 }
 
+static bool adsp_need_subsensor(struct device *dev)
+{
+	int upper_c2c_det = -1;
+	int gpio_level = 0;	// low:Set, high:SMD
+
+	upper_c2c_det = of_get_named_gpio(dev->of_node, 
+			"upper-c2c-det-gpio", 0);
+
+	if (gpio_is_valid(upper_c2c_det)) {
+		gpio_level = gpio_get_value(upper_c2c_det);
+		dev_info(dev, "%s: need subsensor(%d):%s\n",
+				__func__, upper_c2c_det, gpio_level ? 
+				"No(SMD)":"Yes(SET)");
+	}
+
+	is_need_subvdd_disable = of_property_read_bool(dev->of_node,
+			"subvdd-disable");
+
+	if (is_need_subvdd_disable)
+		dev_info(dev, "!!! Need to disable sensor regulators during the shutdown\n");
+
+	return ((gpio_level > 0) ? (false):(true));
+}
+
 static int adsp_init_regulator(struct qcom_adsp *adsp)
 {
 	int len;
@@ -1324,10 +1359,9 @@ static int adsp_init_regulator(struct qcom_adsp *adsp)
 #if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
 	struct device_node *sub_sns_reg_np =
 		of_find_node_by_name(NULL, "adsp_subsensor_reg");
-	u64 now = (u64)ktime_to_us(ktime_get_boottime());
 	bool is_adsp_rproc =
 		(strcmp(adsp->info_name, "adsp") == 0 ? true : false);
-	int max_index = 0;
+	int alloc_cnt = 0, ret;
 #endif
 
 	adsp->reg_cnt = of_property_count_strings(adsp->dev->of_node,
@@ -1337,24 +1371,25 @@ static int adsp_init_regulator(struct qcom_adsp *adsp)
 		return 0;
 	}
 #if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
-	max_index = adsp->reg_cnt;
+	alloc_cnt = adsp->reg_cnt;
 	if (is_adsp_rproc && sub_sns_reg_np != NULL) {
-		adsp->reg_cnt++;
-		dev_info(adsp->dev, "%s increase reg_cnt for sub sns vdd:%d\n",
-			__func__, adsp->reg_cnt);
+		is_need_subsensor = adsp_need_subsensor(adsp->dev);
+		alloc_cnt++;
+		dev_info(adsp->dev, "%s increase cnt for adsp:%d,%d\n",
+			__func__, adsp->reg_cnt, alloc_cnt);
 	}
-#endif
+	adsp->regs = devm_kzalloc(adsp->dev,
+				  sizeof(struct reg_info) * alloc_cnt,
+				  GFP_KERNEL);
+#else
 	adsp->regs = devm_kzalloc(adsp->dev,
 				  sizeof(struct reg_info) * adsp->reg_cnt,
 				  GFP_KERNEL);
+#endif
 	if (!adsp->regs)
 		return -ENOMEM;
 
-#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
-	for (i = 0; i < max_index; i++) {
-#else
 	for (i = 0; i < adsp->reg_cnt; i++) {
-#endif
 		of_property_read_string_index(adsp->dev->of_node, "reg-names",
 					      i, &reg_name);
 
@@ -1408,63 +1443,94 @@ static int adsp_init_regulator(struct qcom_adsp *adsp)
 #endif
 	}
 #if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
-//subsensor
 	if (is_adsp_rproc && sub_sns_reg_np != NULL) {
-		if (reg_init_first_ts == 0) {
-			reg_init_first_ts = now;
-		} else {
-			if (now > reg_init_first_ts
-				&& now - reg_init_first_ts > (u64)DEFERRED_PROBE_MAX_TIME) {
-				subsensor_vdd_retry_cnt = SUBSENSOR_VDD_MAX_RETRY;
-			}
+		ret = adsp_init_subsensor_regulator(adsp->rproc, sub_sns_reg_np);
+		if (ret) {
+			return ret;
 		}
+	}
+#endif
+	return 0;
+}
 
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+int adsp_init_subsensor_regulator(struct rproc *rproc, struct device_node *sub_sns_reg_np)
+{
+	struct qcom_adsp *adsp;
+	const char *reg_name;
+	char uv_ua[50];
+	u32 uv_ua_vals[2];
+	int len, rc;
+
+	if (!rproc) {
+		pr_err("fail to get adsp_rproc, NULL\n");
+		return -1;
+	}
+
+	if (!sub_sns_reg_np) {
+		sub_sns_reg_np = of_find_node_by_name(NULL, "adsp_subsensor_reg");
+		if (sub_sns_reg_np == NULL) {
+			pr_info("no subsensor vdd\n");
+			return 0;
+		}
+	}
+
+	if (!set_subsensor_vdd_done) {
+		adsp = (struct qcom_adsp *)rproc->priv;
 		of_property_read_string(sub_sns_reg_np, "reg-names", &reg_name);
-
-		subsensor_supply_reg_idx = adsp->reg_cnt - 1;
+		subsensor_supply_reg_idx = adsp->reg_cnt;
 		adsp->regs[subsensor_supply_reg_idx].reg =
 			devm_regulator_get_optional(adsp->dev, reg_name);
 		if (IS_ERR(adsp->regs[subsensor_supply_reg_idx].reg)) {
-			dev_err(adsp->dev, "failed to get subsensor:%s reg\n",
-				reg_name);
+			pr_err("failed to get subsensor:%s reg\n", reg_name);
 			subsensor_supply_reg_idx = -1;
 			subsensor_vdd_retry_cnt++;
 			if (subsensor_vdd_retry_cnt >= SUBSENSOR_VDD_MAX_RETRY) {
 				pr_err("fail to get subsensor_vdd: retry:%d\n",
 					subsensor_vdd_retry_cnt);
-				adsp->reg_cnt--;
 				return 0;
 			} else {
-				pr_err("not found yet, defered probe, cnt:%d\n",
-					subsensor_vdd_retry_cnt);
-				return -EPROBE_DEFER;
+				if (is_need_subsensor) {
+					pr_err("not found, deferred probe,cnt:%d\n",
+						subsensor_vdd_retry_cnt);
+					return -EPROBE_DEFER;
+				} else {
+					pr_info("didn't defer in SMD\n");
+					return 0;
+				}
 			}
 		}
 
 		/* Read current(uA) and voltage(uV) value */
 		snprintf(uv_ua, sizeof(uv_ua), "%s-uV-uA", reg_name);
-		if (!of_find_property(sub_sns_reg_np, uv_ua, &len))
+		if (!of_find_property(sub_sns_reg_np, uv_ua, &len)) {
+			pr_err("%s, uv_ua fail.\n", __func__);
 			return 0;
+		}
 
 		rc = of_property_read_u32_array(sub_sns_reg_np, uv_ua,
 						uv_ua_vals,
 						ARRAY_SIZE(uv_ua_vals));
 		if (rc) {
-			dev_err(adsp->dev, "Failed subsensor uVuA value(rc:%d)\n",
-				rc);
+			pr_err("Failed subsensor uVuA value(rc:%d)\n", rc);
 			return rc;
 		}
 
+		adsp->reg_cnt++;
 		if (uv_ua_vals[0] > 0)
 			adsp->regs[subsensor_supply_reg_idx].uV = uv_ua_vals[0];
 		if (uv_ua_vals[1] > 0)
 			adsp->regs[subsensor_supply_reg_idx].uA = uv_ua_vals[1];
-		dev_info(adsp->dev, "found subsensor vdd, idx: %d\n",
-			subsensor_supply_reg_idx);
+		set_subsensor_vdd_done = true;
+		pr_info("found subsensor vdd, idx: %d, total:%d\n",
+			subsensor_supply_reg_idx, adsp->reg_cnt);
+	} else {
+		pr_info("subsensor vdd already set\n");
 	}
-#endif
 	return 0;
 }
+EXPORT_SYMBOL_GPL(adsp_init_subsensor_regulator);
+#endif
 
 static void adsp_init_bus_scaling(struct qcom_adsp *adsp)
 {
@@ -1930,6 +1996,18 @@ static int adsp_remove(struct platform_device *pdev)
 
 	return 0;
 }
+
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+static void adsp_shutdown(struct platform_device *pdev)
+{
+	struct qcom_adsp *adsp = platform_get_drvdata(pdev);
+
+	if (!strcmp(adsp->info_name, "adsp") && is_need_subvdd_disable) {
+		pr_info("%s - idx (main: %d, sub: %d)\n", __func__, sensor_supply_reg_idx, subsensor_supply_reg_idx);
+		adsp_stop(adsp->rproc);
+	}
+}
+#endif
 
 static const struct adsp_data adsp_resource_init = {
 		.crash_reason_smem = 423,
@@ -2938,6 +3016,9 @@ MODULE_DEVICE_TABLE(of, adsp_of_match);
 static struct platform_driver adsp_driver = {
 	.probe = adsp_probe,
 	.remove = adsp_remove,
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+	.shutdown = adsp_shutdown,
+#endif
 	.driver = {
 		.name = "qcom_q6v5_pas",
 		.of_match_table = adsp_of_match,

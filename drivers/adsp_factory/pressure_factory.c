@@ -49,13 +49,6 @@ static void press_get_device_id(struct adsp_data *data)
 	int32_t device_index = UNKNOWN_INDEX;
 	uint8_t cnt = 0, device_id = 0;
 
-	memcpy(data->press_device_vendor,
-		press_device_list[0].device_vendor,
-		sizeof(char) * DEVICE_INFO_LENGTH);
-	memcpy(data->press_device_name,
-		press_device_list[0].device_name,
-		sizeof(char) * DEVICE_INFO_LENGTH);
-
 	adsp_unicast(&cmd, sizeof(cmd), MSG_PRESSURE, 0, MSG_TYPE_OPTION_DEFINE);
 
 	while (!(data->ready_flag[MSG_TYPE_OPTION_DEFINE]
@@ -101,7 +94,7 @@ static ssize_t pressure_vendor_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct adsp_data *data = dev_get_drvdata(dev);
-	if (data->press_device_vendor[0] == 0)
+	if (!strcmp(data->press_device_vendor, press_device_list[0].device_vendor))
 		press_get_device_id(data);
 
 	return snprintf(buf, PAGE_SIZE, "%s\n", data->press_device_vendor);
@@ -111,7 +104,7 @@ static ssize_t pressure_name_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct adsp_data *data = dev_get_drvdata(dev);
-	if (data->press_device_name[0] == 0)
+	if (!strcmp(data->press_device_name, press_device_list[0].device_name))
 		press_get_device_id(data);
 
 	return snprintf(buf, PAGE_SIZE, "%s\n", data->press_device_name);
@@ -407,12 +400,22 @@ void pressure_cal_work_func(struct work_struct *work)
 	}
 
 	pressure_cal = data->msg_buf[MSG_PRESSURE][0];
-	press_get_device_id(data);
+	if (!strcmp(data->press_device_vendor, press_device_list[0].device_vendor) ||
+		!strcmp(data->press_device_name, press_device_list[0].device_name))
+		press_get_device_id(data);
+
 	pr_info("[FACTORY] %s: pressure_cal = %d (lsb)\n", __func__, data->msg_buf[MSG_PRESSURE][0]);
 }
 EXPORT_SYMBOL(pressure_cal_work_func);
 void pressure_factory_init_work(struct adsp_data *data)
 {
+	memcpy(data->press_device_vendor,
+		press_device_list[0].device_vendor,
+		sizeof(char) * DEVICE_INFO_LENGTH);
+	memcpy(data->press_device_name,
+		press_device_list[0].device_name,
+		sizeof(char) * DEVICE_INFO_LENGTH);
+
 	schedule_delayed_work(&data->pressure_cal_work, msecs_to_jiffies(8000));
 }
 EXPORT_SYMBOL(pressure_factory_init_work);

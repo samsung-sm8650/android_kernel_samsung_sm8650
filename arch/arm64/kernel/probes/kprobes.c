@@ -135,12 +135,13 @@ int __kprobes arch_prepare_kprobe(struct kprobe *p)
 
 void *alloc_insn_page(void)
 {
-	return __vmalloc_node_range(PAGE_SIZE, 1, VMALLOC_START, VMALLOC_END,
+	void *p = __vmalloc_node_range(PAGE_SIZE, 1, VMALLOC_START, VMALLOC_END,
 			GFP_KERNEL, PAGE_KERNEL_ROX, VM_FLUSH_RESET_PERMS,
 			NUMA_NO_NODE, __builtin_return_address(0));
 #ifdef CONFIG_RKP
 	uh_call(UH_APP_RKP, RKP_KPROBE_PAGE, (u64)p, 4096, 0, 0);
 #endif
+	return p;
 }
 
 /* arm kprobe: install breakpoint in text */

@@ -3072,6 +3072,7 @@ int wacom_probe(struct wacom_data *wacom)
 	ret = wacom_hw_init(wacom);
 	if (ret < 0) {
 		input_err(true, wacom->dev, "%s: fail to init hw\n", __func__);
+		g_nb_wac_camera = NULL;
 		wacom_dev_remove(wacom);
 		return ret;
 	}

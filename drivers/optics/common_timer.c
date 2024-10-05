@@ -73,13 +73,13 @@ static enum hrtimer_restart timer_func(struct hrtimer *timer)
 		printk(KERN_ERR "%s: timer_mgr is NULL\n", __func__);
 		return HRTIMER_NORESTART;
 	}
-	
+
 	if (timer_mgr->stk_wq == NULL)
 	{
 		printk(KERN_ERR "%s: timer_mgr->stk_wq is NULL\n", __func__);
 		return HRTIMER_NORESTART;
 	}
-	
+
 	if (timer_mgr->timer_info == NULL)
 	{
 		printk(KERN_ERR "%s: timer_mgr->timer_info is NULL\n", __func__);
@@ -257,6 +257,7 @@ int stop_timer(stk_timer_info *t_info)
 				if (linux_timer_mgr[timer_idx].timer_info->is_active)
 				{
 					hrtimer_cancel(&linux_timer_mgr[timer_idx].stk_hrtimer);
+					drain_workqueue(linux_timer_mgr[timer_idx].stk_wq);
 					linux_timer_mgr[timer_idx].timer_info->is_active = false;
 					printk(KERN_ERR "%s: stop timer name %s\n", __func__, linux_timer_mgr[timer_idx].timer_info->wq_name);
 				}

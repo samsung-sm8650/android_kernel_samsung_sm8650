@@ -673,7 +673,7 @@ void SEC_fft_entry(struct stk6d2x_data *alps_data)
 	ratio_DC_max = buf[0] / max_thd;
 	ratio_max_avg = max_thd / average_thd;
 
-	ALS_info("DEBUG_FLICKER DECISION_THD buf[%d]=%u, avg=%lld, max=%lld, DC=%lld, DC/max=%lld, max/avg=%lld", imax, buf[imax], average_thd, max_thd, buf[0], ratio_DC_max, ratio_max_avg);
+	ALS_info("DEBUG_FLICKER DECISION_THD buf[%d]=%u, avg=%llu, max=%llu, DC=%u, DC/max=%llu, max/avg=%llu", imax, buf[imax], average_thd, max_thd, buf[0], ratio_DC_max, ratio_max_avg);
 
 	// get valid threshold
 	// thd = calc_thd(clear_average_fifo, clear_average, buf);
@@ -812,6 +812,7 @@ int32_t stk6d2x_enable_fifo(struct stk6d2x_data * alps_data, bool en)
 		i2c_data_reg[0] = (max_frame_count >> 8) & 0x03;
 		i2c_data_reg[1] = max_frame_count & 0xFF;
 		alps_data->fifo_info.fft_buf_idx = 0;
+		alps_data->index_last = 0;
 	}
 	else
 	{

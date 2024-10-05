@@ -16,7 +16,7 @@
 
 struct tsp_ioctl {
 	int num;
-	u8 data[PAGE_SIZE];
+	u8 data[4096];
 };
 
 static struct mutex lock;

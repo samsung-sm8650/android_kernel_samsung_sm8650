@@ -15,7 +15,7 @@
 
 struct tsp_ioctl {
 	int num;
-	u8 data[PAGE_SIZE];
+	u8 data[4096];
 };
 
 #define IOCTL_TSP_MAP_READ	_IOR(0, 0, struct tsp_ioctl)

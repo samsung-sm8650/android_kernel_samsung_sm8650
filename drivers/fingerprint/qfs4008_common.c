@@ -187,10 +187,10 @@ static struct device_attribute *fp_attrs[] = {
 
 int qfs4008_pinctrl_register(struct qfs4008_drvdata *drvdata)
 {
-	drvdata->p = pinctrl_get_select_default(drvdata->dev);
+	drvdata->p = devm_pinctrl_get(drvdata->dev);
 	if (IS_ERR(drvdata->p)) {
 		pr_err("failed pinctrl_get\n");
-		goto pinctrl_register_default_exit;
+		goto pinctrl_get_exit;
 	}
 
 #if !defined(ENABLE_SENSORS_FPRINT_SECURE) || defined(DISABLED_GPIO_PROTECTION)
@@ -216,7 +216,7 @@ pinctrl_register_exit:
 	drvdata->pins_poweron = NULL;
 	drvdata->pins_poweroff = NULL;
 #endif
-pinctrl_register_default_exit:
+pinctrl_get_exit:
 	pr_err("failed\n");
 	return -ENODEV;
 }
@@ -741,7 +741,11 @@ static int qfs4008_dev_register(struct qfs4008_drvdata *drvdata)
 		goto err_cdev_add;
 	}
 
+#if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+	drvdata->qfs4008_class = class_create(QFS4008_DEV);
+#else
 	drvdata->qfs4008_class = class_create(THIS_MODULE, QFS4008_DEV);
+#endif
 	if (IS_ERR(drvdata->qfs4008_class)) {
 		rc = PTR_ERR(drvdata->qfs4008_class);
 		pr_err("class_create failed %d\n", rc);
@@ -787,7 +791,7 @@ static void qfs4008_gpio_report_event(struct qfs4008_drvdata *drvdata)
 	int state;
 	struct fw_event_desc fw_event;
 
-	state = (__gpio_get_value(drvdata->fd_gpio.gpio) ? FINGER_DOWN_GPIO_STATE : FINGER_LEAVE_GPIO_STATE)
+	state = (gpio_get_value(drvdata->fd_gpio.gpio) ? FINGER_DOWN_GPIO_STATE : FINGER_LEAVE_GPIO_STATE)
 		^ drvdata->fd_gpio.active_low;
 
 	if (state == drvdata->fd_gpio.last_gpio_state) {
@@ -980,7 +984,6 @@ static int qfs4008_read_device_tree(struct platform_device *pdev,
 	struct qfs4008_drvdata *drvdata)
 {
 	int rc = 0;
-	enum of_gpio_flags flags;
 
 	/* read IPC gpio */
 	drvdata->fw_ipc.gpio = of_get_named_gpio(pdev->dev.of_node,
@@ -992,14 +995,14 @@ static int qfs4008_read_device_tree(struct platform_device *pdev,
 	}
 
 	/* read WUHB gpio */
-	drvdata->fd_gpio.gpio = of_get_named_gpio_flags(pdev->dev.of_node,
-						"qcom,wuhb-gpio", 0, &flags);
+	drvdata->fd_gpio.gpio = of_get_named_gpio(pdev->dev.of_node,
+						"qcom,wuhb-gpio", 0);
 	if (drvdata->fd_gpio.gpio < 0) {
 		rc = drvdata->fd_gpio.gpio;
 		pr_err("wuhb gpio not found, error=%d\n", rc);
 		goto dt_failed;
 	} else {
-		drvdata->fd_gpio.active_low = flags & OF_GPIO_ACTIVE_LOW;
+		drvdata->fd_gpio.active_low = 0x0;
 	}
 
 	rc = of_property_read_string(pdev->dev.of_node, "qcom,btp-regulator-1p8", &drvdata->btp_vdd_1p8);
@@ -1213,7 +1216,7 @@ probe_failed_ipc_gpio:
 	gpio_free(drvdata->fd_gpio.gpio);
 probe_failed_fd_gpio:
 	if (drvdata->p) {
-		pinctrl_put(drvdata->p);
+		devm_pinctrl_put(drvdata->p);
 		drvdata->p = NULL;
 	}
 	wakeup_source_unregister(drvdata->clk_setting->spi_wake_lock);
@@ -1266,7 +1269,7 @@ static int qfs4008_remove(struct platform_device *pdev)
 	spi_clk_unregister(drvdata->clk_setting);
 
 	if (drvdata->p) {
-		pinctrl_put(drvdata->p);
+		devm_pinctrl_put(drvdata->p);
 		drvdata->p = NULL;
 	}
 	drvdata = NULL;

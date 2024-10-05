@@ -848,6 +848,8 @@ struct sec_ts_plat_data {
 	bool support_always_on;
 	bool prox_lp_scan_enabled;
 
+	int always_lpm;
+
 	bool work_queue_probe_enabled;
 	bool first_booting_disabled;
 	int work_queue_probe_delay;

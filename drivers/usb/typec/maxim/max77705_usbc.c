@@ -1333,12 +1333,12 @@ int max77705_store_hmd_dev(struct max77705_usbc_platform_data *usbc_data, char *
 	tok = strsep(&str, ",");
 	i = 0, j = 0;
 	while (tok != NULL && *tok != 0xa/*LF*/) {
-		if (i > num_hmd * HMD_POWER_FIELD_MAX) {
+		if (i >= num_hmd * HMD_POWER_FIELD_MAX) {
 			msg_maxim("num of tok cannot exceed <%dx%d>!",
 				num_hmd, HMD_POWER_FIELD_MAX);
 			break;
 		}
-		if (j > MAX_NUM_HMD) {
+		if (j >= MAX_NUM_HMD) {
 			msg_maxim("num of HMD cannot exceed %d!",
 				MAX_NUM_HMD);
 			break;

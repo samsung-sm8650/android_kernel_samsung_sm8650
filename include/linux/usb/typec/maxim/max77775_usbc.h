@@ -135,6 +135,13 @@ struct max77775_usbc_platform_data {
 	/* USBID pin */
 	int irq_usbid;
 
+#if defined(CONFIG_MAX77775_CCOPEN_AFTER_WATERCABLE)
+	/* TA Connect pin */
+	int irq_taconn;
+	u8 ta_conn_status;
+	struct delayed_work set_ccopen_for_watercable_work;
+#endif
+
 	/* register information */
 	u8 usbc_status1;
 	u8 usbc_status2;

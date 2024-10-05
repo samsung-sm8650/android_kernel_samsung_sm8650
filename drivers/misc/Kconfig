@@ -533,6 +533,10 @@ source "drivers/misc/pvpanic/Kconfig"
 source "drivers/misc/mchp_pci1xxxx/Kconfig"
 endmenu
 
+#
+# Dev-Ril-Bridge driver
+#
+
 config DEV_RIL_BRIDGE
 	tristate "Support a bridge between device and RIL"
 	default n

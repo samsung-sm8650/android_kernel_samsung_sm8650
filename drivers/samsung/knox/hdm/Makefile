@@ -12,5 +12,12 @@
 #GNU General Public License for more details.
 
 obj-$(CONFIG_HDM)		+= hdm.o
-hdm-objs = main.o uh_entry.o
+
+ifeq ($(CONFIG_UH), y)
+    $(warning [HDM] CONFIG_UH Enabled)
+    hdm-objs = main.o uh_entry.o
+    ccflags-y += -DCONFIG_HDM_UH=true
+else
+    hdm-objs = main.o
+endif
 

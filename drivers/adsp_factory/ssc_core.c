@@ -417,7 +417,7 @@ static ssize_t remove_sensor_sysfs_store(struct device *dev,
 #if IS_ENABLED(CONFIG_SLPI_LOADING_FAILURE_DEBUG)
 	removed_sensors |= (0x1 << type);
 	if ((removed_sensors & 0x3f) == 0x3f)
-#if 0
+#if 0	
 		panic("slpi is not loaded, force panic\n");
 #else
 		pr_info("[FACTORY] %s: slpi is not loaded\n", __func__);
@@ -725,6 +725,10 @@ static ssize_t fac_fstate_store(struct device *dev,
 		data->fac_fstate = fstate[1] = FSTATE_FAC_ACTIVE;
 	else if (sysfs_streq(buf, "3"))
 		data->fac_fstate = fstate[1] = FSTATE_FAC_INACTIVE_2;
+#if IS_ENABLED(CONFIG_TABLET_MODEL_CONCEPT)
+	else if (sysfs_streq(buf, "13"))
+		data->fac_fstate = fstate[1] = LIGHT_DUAL_CHECK_MODE;
+#endif
 	else
 		data->fac_fstate = fstate[1] = curr_fstate;
 

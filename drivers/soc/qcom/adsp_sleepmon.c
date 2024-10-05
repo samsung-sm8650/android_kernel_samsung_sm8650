@@ -1264,6 +1264,10 @@ static void sleepmon_lpm_exception_check(u64 curr_timestamp, u64 elapsed_time)
 				((curr_lpm_stats.accumulated -
 				g_adspsleepmon.backup_lpm_stats.accumulated) /
 				ADSPSLEEPMON_SYS_CLK_TICKS_PER_MILLISEC));
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+			if (sysmon_event_stats.sleep_latency == 5000)
+				panic("Detected ADSP sleep issue");
+#endif
 
 			is_audio_active = sleepmon_is_audio_active(&curr_dsppm_stats);
 			sleepmon_get_dsppm_clients();
@@ -1448,7 +1452,6 @@ static int adspsleepmon_worker(void *data)
 				elapsed_time = U64_MAX -
 						g_adspsleepmon.backup_lpi_timestamp +
 						curr_timestamp;
-
 
 			/* Check elapsed time for both suspend and timer events */
 			if (elapsed_time <

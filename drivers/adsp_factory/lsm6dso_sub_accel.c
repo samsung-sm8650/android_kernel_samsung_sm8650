@@ -272,6 +272,15 @@ RETRY_ACCEL_SELFTEST:
 		data->msg_buf[MSG_ACCEL_SUB][5], data->msg_buf[MSG_ACCEL_SUB][6],
 		data->msg_buf[MSG_ACCEL_SUB][7]);
 
+	pr_info("[FACTORY] %s : pre/postP/postN [%d, %d, %d/%d, %d, %d/%d, %d, %d], comm_err_cnt %d/%d/%d\n",
+		__func__, data->msg_buf[MSG_ACCEL_SUB][8],
+		data->msg_buf[MSG_ACCEL_SUB][9], data->msg_buf[MSG_ACCEL_SUB][10],
+		data->msg_buf[MSG_ACCEL_SUB][11], data->msg_buf[MSG_ACCEL_SUB][12],
+		data->msg_buf[MSG_ACCEL_SUB][13], data->msg_buf[MSG_ACCEL_SUB][14],
+		data->msg_buf[MSG_ACCEL_SUB][15], data->msg_buf[MSG_ACCEL_SUB][16],
+		data->msg_buf[MSG_ACCEL_SUB][17], data->msg_buf[MSG_ACCEL_SUB][18],
+		data->msg_buf[MSG_ACCEL_SUB][19]);
+
 	if (data->msg_buf[MSG_ACCEL_SUB][1] == 1) {
 		pr_info("[FACTORY] %s : Pass - result = %d, retry = %d\n",
 			__func__, data->msg_buf[MSG_ACCEL_SUB][1], retry);
@@ -280,8 +289,7 @@ RETRY_ACCEL_SELFTEST:
 		pr_err("[FACTORY] %s : Fail - result = %d, retry = %d\n",
 			__func__, data->msg_buf[MSG_ACCEL_SUB][1], retry);
 
-		if (retry < ACCEL_ST_TRY_CNT &&
-			data->msg_buf[MSG_ACCEL_SUB][2] == 0) {
+		if (retry < ACCEL_ST_TRY_CNT) {
 			retry++;
 			msleep(200);
 			cnt = 0;

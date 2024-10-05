@@ -35,6 +35,9 @@
 #include <linux/bitfield.h>
 #include <linux/uaccess.h>
 #include <asm/byteorder.h>
+#if IS_ENABLED(CONFIG_USB_VENDOR_NOTIFY)
+#include <linux/usb_vendor_notify.h>
+#endif
 
 #include "hub.h"
 #include "otg_productlist.h"
@@ -2581,6 +2584,11 @@ int usb_new_device(struct usb_device *udev)
 	dev_dbg(&udev->dev, "udev %d, busnum %d, minor = %d\n",
 			udev->devnum, udev->bus->busnum,
 			(((udev->bus->busnum-1) * 128) + (udev->devnum-1)));
+#if IS_ENABLED(CONFIG_USB_VENDOR_NOTIFY)
+	err = send_usb_vendor_notify_new_device(udev);
+	if (err)
+		goto fail;
+#endif
 	/* export the usbdev device-node for libusb */
 	udev->dev.devt = MKDEV(USB_DEVICE_MAJOR,
 			(((udev->bus->busnum-1) * 128) + (udev->devnum-1)));

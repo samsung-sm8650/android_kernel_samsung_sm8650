@@ -1082,6 +1082,11 @@ int synaptics_ts_probe(struct device *dev)
 
 int synaptics_ts_remove(struct synaptics_ts_data *ts)
 {
+	if (!ts->probe_done) {
+		input_info(true, ts->dev, "%s don't success probe yet\n", __func__);
+		return 0;
+	}
+
 	input_info(true, ts->dev, "%s\n", __func__);
 
 	mutex_lock(&ts->plat_data->enable_mutex);

@@ -31,6 +31,9 @@
 #define GET_SEC(A)		((A) / (MSM_ARCH_TIMER_FREQ))
 #define GET_MSEC(A)		(((A) / (MSM_ARCH_TIMER_FREQ / 1000)) % 1000)
 #endif /* CONFIG_SEC_PM */
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+#include <linux/sec_pm_log.h>
+#endif
 
 #define RPM_DYNAMIC_ADDR	0x14
 #define RPM_DYNAMIC_ADDR_MASK	0xFFFF
@@ -1065,6 +1068,11 @@ static void sec_sleep_stats_show(const char *annotation)
 	char *buf_ptr = buf;
 	unsigned int duration_sec, duration_msec;
 
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	char pm_log_buf[MAX_BUF_LEN];
+	char *pm_log_buf_ptr = pm_log_buf;
+#endif
+
 #if defined(DSP_SLEEP_DEBUG_ON)
 	struct _dsp_entry *dsp_entry = NULL;
 	int is_debug_low = 0;
@@ -1089,6 +1097,9 @@ static void sec_sleep_stats_show(const char *annotation)
 	}
 
 	buf_ptr += sprintf(buf_ptr, "PM: %s: ", annotation);
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	pm_log_buf_ptr += sprintf(pm_log_buf_ptr, "soc: %s: ", (is_exit ? "ex" : "en"));
+#endif
 
 	for (i = 0; i < drv->config->num_records; i++) {
 		struct sleep_stats stat;
@@ -1127,6 +1138,10 @@ static void sec_sleep_stats_show(const char *annotation)
 				stat_type,
 				stat.count,
 				duration_sec, duration_msec);
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+		pm_log_buf_ptr += sprintf(pm_log_buf_ptr, "(%d, %u.%u)",
+					stat.count, duration_sec, (duration_msec / 100));
+#endif
 		/* END: get soc_stat's info */
 
 		/* Move to next soc_stat */
@@ -1140,6 +1155,9 @@ static void sec_sleep_stats_show(const char *annotation)
 	 * Print subsystem_stats
 	 */
 	buf_ptr += sprintf(buf_ptr, "PM: %s: ", annotation);
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	pm_log_buf_ptr += sprintf(pm_log_buf_ptr, "/");
+#endif
 
 	for (i = 0; i < max_subsys_count; i++) {
 		struct subsystem_data *subsystem;
@@ -1208,12 +1226,19 @@ static void sec_sleep_stats_show(const char *annotation)
 						   subsystem->name,
 						   stat->count,
 						   duration_sec, duration_msec);
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+		pm_log_buf_ptr += sprintf(pm_log_buf_ptr, "(%d, %u.%u)",
+					stat->count, duration_sec, (duration_msec / 100));
+#endif
 	}
 
 	buf_ptr--;
 	buf_ptr--;
 	buf_ptr += sprintf(buf_ptr, "\n");
 
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	ss_power_print("%s\n", pm_log_buf);
+#endif
 	mutex_unlock(&sleep_stats_mutex);
 
 	pr_info("%s", buf);

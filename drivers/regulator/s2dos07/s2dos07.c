@@ -47,6 +47,12 @@
 #include <linux/sec_class.h>
 #endif /* CONFIG_SEC_PM */
 
+#if IS_ENABLED(CONFIG_SEC_KUNIT)
+#define __visible_for_testing
+#else
+#define __visible_for_testing static
+#endif
+
 struct s2dos07_data {
 	struct s2dos07_dev *iodev;
 	int num_regulators;
@@ -264,9 +270,10 @@ out:
 	return ret;
 }
 
-static int s2m_set_voltage_time_sel(struct regulator_dev *rdev,
-				   unsigned int old_selector,
-				   unsigned int new_selector)
+__visible_for_testing
+int s2m_set_voltage_time_sel(struct regulator_dev *rdev,
+					unsigned int old_selector,
+					unsigned int new_selector)
 {
 	int old_volt, new_volt;
 
@@ -282,6 +289,9 @@ static int s2m_set_voltage_time_sel(struct regulator_dev *rdev,
 
 	return 0;
 }
+#if IS_ENABLED(CONFIG_SEC_KUNIT)
+EXPORT_SYMBOL_KUNIT(s2m_set_voltage_time_sel);
+#endif
 
 #if IS_ENABLED(CONFIG_SEC_PM)
 static int s2m_elvxx_disable(struct regulator_dev *rdev)
@@ -363,15 +373,19 @@ static struct regulator_ops s2dos07_elvxx_ops = {
 }
 #endif /* CONFIG_SEC_PM */
 
-static struct regulator_desc regulators[S2DOS07_REGULATOR_MAX] = {
+__visible_for_testing
+struct regulator_desc regulators[S2DOS07_REGULATOR_MAX] = {
 	/* name, id, ops, min_uv, uV_step, vsel_reg, enable_reg */
 	BUCK_DESC("s2dos07-buck1", _BUCK(1), &_buck_ops(), _BUCK(_MIN1),
 		_BUCK(_STEP1), _REG(_BUCK_VOUT),
 		_REG(_BUCK_EN), _MASK(_B1), _TIME(_BUCK)),
 #if IS_ENABLED(CONFIG_SEC_PM)
-	ELVXX_DESC("s2dos07-elvdd-elvss", S2DOS05_ELVXX),
+	ELVXX_DESC("s2dos07-elvdd-elvss", S2DOS07_ELVXX),
 #endif /* CONFIG_SEC_PM */
 };
+#if IS_ENABLED(CONFIG_SEC_KUNIT)
+EXPORT_SYMBOL_KUNIT(regulators);
+#endif
 
 static irqreturn_t s2dos07_irq_thread(int irq, void *irq_data)
 {
@@ -380,6 +394,15 @@ static irqreturn_t s2dos07_irq_thread(int irq, void *irq_data)
 
 	s2dos07_read_reg(s2dos07->iodev->i2c, S2DOS07_REG_IRQ, &val);
 	pr_info("%s:irq(%d) S2DOS07_REG_IRQ : 0x%02hhx\n", __func__, irq, val);
+
+	s2dos07_read_reg(s2dos07->iodev->i2c, S2DOS07_REG_UVP_STATUS, &val);
+	pr_info("%s:irq(%d) S2DOS07_REG_UVP_STATUS : 0x%02hhx\n", __func__, irq, val);
+
+	s2dos07_read_reg(s2dos07->iodev->i2c, S2DOS07_REG_OVP_STATUS, &val);
+	pr_info("%s:irq(%d) S2DOS07_REG_OVP_STATUS : 0x%02hhx\n", __func__, irq, val);
+
+	s2dos07_read_reg(s2dos07->iodev->i2c, S2DOS07_REG_OVP_MODE, &val);
+	pr_info("%s:irq(%d) S2DOS07_REG_OVP_MODE : 0x%02hhx\n", __func__, irq, val);
 
 	return IRQ_HANDLED;
 }
@@ -741,8 +764,7 @@ static void s2dos07_sec_pm_deinit(struct s2dos07_data *info)
 }
 #endif /* CONFIG_SEC_PM */
 
-static int s2dos07_pmic_probe(struct i2c_client *i2c,
-				const struct i2c_device_id *dev_id)
+static int __s2dos07_pmic_probe(struct i2c_client *i2c)
 {
 	struct s2dos07_dev *iodev;
 	struct s2dos07_platform_data *pdata = i2c->dev.platform_data;
@@ -822,7 +844,7 @@ static int s2dos07_pmic_probe(struct i2c_client *i2c,
 #if IS_ENABLED(CONFIG_REGULATOR_DEBUG_CONTROL)
 		ret = devm_regulator_debug_register(&i2c->dev, s2dos07->rdev[i]);
 		if (ret)
-			dev_err(&i2c->dev, "failed to register debug regulator for %d, rc=%d\n",
+			dev_err(&i2c->dev, "failed to register debug regulator for %lu, rc=%d\n",
 					i, ret);
 #endif
 	}
@@ -896,13 +918,29 @@ static struct of_device_id s2dos07_i2c_dt_ids[] = {
 };
 #endif /* CONFIG_OF */
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+static int s2dos07_pmic_probe(struct i2c_client *i2c)
+{
+	return __s2dos07_pmic_probe(i2c);
+}
+#else
+static int s2dos07_pmic_probe(struct i2c_client *i2c,
+				const struct i2c_device_id *dev_id)
+{
+	return __s2dos07_pmic_probe(i2c);
+}
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
 static void s2dos07_pmic_remove(struct i2c_client *i2c)
 #else
 static int s2dos07_pmic_remove(struct i2c_client *i2c)
 #endif
 {
+#if IS_ENABLED(CONFIG_SEC_PM) || IS_ENABLED(CONFIG_DRV_SAMSUNG_PMIC)
 	struct s2dos07_data *info = i2c_get_clientdata(i2c);
+#endif
+
 #if IS_ENABLED(CONFIG_DRV_SAMSUNG_PMIC)
 	struct device *s2dos07_pmic = info->dev;
 	int i = 0;

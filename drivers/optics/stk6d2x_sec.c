@@ -123,7 +123,7 @@ void stk_sec_report(struct stk6d2x_data *alps_data)
 	uint32_t temp_uv = (uint32_t)(((uint64_t)(alps_data->uv_local_average)) * 79LL / 100LL);
 
 	if (cnt++ >= 10) {
-		ALS_info("IR:%d Clear:%d UV:%d  ir_gain:%d clear_gain:%d uv_gain:%d| Flicker:%dHz\n",
+		ALS_info("IR:%llu Clear:%llu UV:%llu  ir_gain:%d clear_gain:%d uv_gain:%d| Flicker:%dHz\n",
 			alps_data->ir_local_average, alps_data->clear_local_average, alps_data->uv_local_average,
 			alps_data->ir_gain, alps_data->clear_gain, alps_data->uv_gain, alps_data->flicker);
 		ALS_info("AWB: IR*:%d Clear*:%d UV*:%d\n", temp_ir, temp_clear, temp_uv);
@@ -625,9 +625,9 @@ static ssize_t als_ir_show(struct device *dev, struct device_attribute *attr, ch
 		msleep_interruptible(10);
 	}
 
-	ALS_dbg("read als_ir = %d (is_local_avg_update = %d, waiting_cnt = %d)\n",
+	ALS_dbg("read als_ir = %llu (is_local_avg_update = %d, waiting_cnt = %d)\n",
 		data->ir_local_average, data->is_local_avg_update, waiting_cnt);
-	return snprintf(buf, PAGE_SIZE, "%d\n", data->ir_local_average);
+	return snprintf(buf, PAGE_SIZE, "%llu\n", data->ir_local_average);
 }
 
 static ssize_t als_clear_show(struct device *dev, struct device_attribute *attr, char *buf)
@@ -660,9 +660,9 @@ static ssize_t als_wideband_show(struct device *dev, struct device_attribute *at
 		msleep_interruptible(10);
 	}
 
-	ALS_dbg("read als_wideband = %d (is_local_avg_update = %d, waiting_cnt = %d)\n",
+	ALS_dbg("read als_wideband = %llu (is_local_avg_update = %d, waiting_cnt = %d)\n",
 		data->ir_local_average, data->is_local_avg_update, waiting_cnt);
-	return snprintf(buf, PAGE_SIZE, "%d\n", data->ir_local_average);
+	return snprintf(buf, PAGE_SIZE, "%llu\n", data->ir_local_average);
 }
 
 static ssize_t als_uv_show(struct device *dev, struct device_attribute *attr, char *buf)
@@ -1039,8 +1039,12 @@ static int stk6d2x_parse_dt(struct stk6d2x_wrapper *stk_wrapper,
 	}
 
 	if (alps_data->use_ext_clk) {
+#if KERNEL_VERSION(6, 2, 0) <= LINUX_VERSION_CODE
+		alps_data->ext_clk_gpio = of_get_named_gpio(np, "stk,ext-clk-gpio", 0);
+#else
 		alps_data->ext_clk_gpio = of_get_named_gpio_flags(np, "stk,ext-clk-gpio",
 					0, &pdata->int_flags);
+#endif
 
 		if (alps_data->ext_clk_gpio < 0)
 			ALS_err("Unable to read ext_clk_gpio\n");
@@ -1207,7 +1211,7 @@ int stk6d2x_probe(struct i2c_client *client,
 	stk6d2x_data *alps_data;
 	struct stk6d2x_platform_data *plat_data;
 
-	ALS_info("stk6d2x_version : %d.%d.%d\n", STK6D2X_MAJOR,
+	ALS_dbg("stk6d2x_version : %d.%d.%d\n", STK6D2X_MAJOR,
 		   STK6D2X_MINOR,
 		   STK6D2X_REV);
 
@@ -1257,7 +1261,7 @@ int stk6d2x_probe(struct i2c_client *client,
 
 	// Parsing device tree
 	if (client->dev.of_node) {
-		ALS_info("probe with device tree\n");
+		ALS_dbg("probe with device tree\n");
 		plat_data = devm_kzalloc(&client->dev,
 								 sizeof(struct stk6d2x_platform_data), GFP_KERNEL);
 
@@ -1428,6 +1432,18 @@ int stk6d2x_remove(struct i2c_client *client)
 	return 0;
 }
 
+#if KERNEL_VERSION(6, 2, 0) <= LINUX_VERSION_CODE
+static int stk6d2x_i2c_probe(struct i2c_client *client)
+{
+	struct common_function common_fn =
+	{
+		.bops = &stk_i2c_bops,
+		.tops = &stk_t_ops,
+		.gops = &stk_g_ops,
+	};
+	return stk6d2x_probe(client, &common_fn);
+}
+#else
 static int stk6d2x_i2c_probe(struct i2c_client *client,
 							 const struct i2c_device_id *id)
 {
@@ -1439,6 +1455,7 @@ static int stk6d2x_i2c_probe(struct i2c_client *client,
 	};
 	return stk6d2x_probe(client, &common_fn);
 }
+#endif
 
 static int stk6d2x_i2c_remove(struct i2c_client *client)
 {

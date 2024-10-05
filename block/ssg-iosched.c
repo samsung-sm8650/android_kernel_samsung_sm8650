@@ -359,8 +359,10 @@ static struct request *ssg_dispatch_request(struct blk_mq_hw_ctx *hctx)
 	spin_unlock(&ssg->lock);
 
 	rqi = ssg_rq_info(ssg, rq);
-	if (likely(rqi))
+	if (likely(rqi)) {
+		rqi->sector = blk_rq_pos(rq);
 		rqi->data_size = blk_rq_bytes(rq);
+	}
 
 	return rq;
 }
@@ -371,7 +373,7 @@ static void ssg_completed_request(struct request *rq, u64 now)
 	struct ssg_request_info *rqi;
 
 	rqi = ssg_rq_info(ssg, rq);
-	if (likely(rqi)) {
+	if (likely(rqi && rqi->sector == blk_rq_pos(rq))) {
 		ssg_stat_account_io_done(ssg, rq, rqi->data_size, now);
 		blk_sec_stat_account_io_complete(rq, rqi->data_size, rqi->pio);
 	}
@@ -669,7 +671,7 @@ static void ssg_prepare_request(struct request *rq)
 
 	atomic_inc(&ssg->allocated_rqs);
 
-	ssg_wb_ctrl(ssg);
+	ssg_wb_ctrl(ssg, rq);
 
 	rqi = ssg_rq_info(ssg, rq);
 	if (likely(rqi)) {

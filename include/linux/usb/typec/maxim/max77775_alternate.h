@@ -449,13 +449,21 @@ enum VDM_MSG_IRQ_State {
 #define DP_STATUS_RESPONSE_SIZE 11
 #define DP_CONFIGURE_RESPONSE_SIZE 11
 
+#define SAMSUNGUVDM_DEXFAN_RESPONSE_SIZE 31
+
 #define SAMSUNGUVDM_MAX_LONGPACKET_SIZE	(236)
 #define SAMSUNGUVDM_MAX_SHORTPACKET_SIZE (1)
 #define SAMSUNGUVDM_WAIT_MS (2000)
 #define SAMSUNGUVDM_ALIGN		(4)
+#define SAMSUNGUVDM_UVDM_HEADER_OFFSET	(4)
 #define SAMSUNGUVDM_MAXDATA_FIRST_UVDMSET	(12)
 #define SAMSUNGUVDM_MAXDATA_NORMAL_UVDMSET	(16)
 #define SAMSUNGUVDM_CHECKSUM_DATA_COUNT		(20)
+
+#define MSG_HEADER_OFFSET (0)
+#define VDM_HEADER_OFFSET (2)
+#define VDO1_OFFSET (6)
+#define VDO2_OFFSET (10)
 
 enum uvdm_rx_type {
 	RX_ACK = 0,
@@ -604,12 +612,10 @@ void max77775_receive_alternate_message(struct max77775_usbc_platform_data *data
 										MAX77775_VDM_MSG_IRQ_STATUS_Type *VDM_MSG_IRQ_State);
 void max77775_vdm_message_handler(struct max77775_usbc_platform_data *usbpd_data,
 								  char *opcode_data, int len);
-void max77775_sec_unstructured_message_handler(struct max77775_usbc_platform_data *usbpd_data,
+void max77775_uvdm_opcode_response_handler(struct max77775_usbc_platform_data *usbpd_data,
 											   char *opcode_data, int len);
 void max77775_send_dex_fan_unstructured_vdm_message(void *data, int cmd);
-void max77775_acc_detach_check(struct work_struct *work);
 void max77775_set_enable_alternate_mode(int mode);
-void max77775_vdm_process_set_samsung_alternate_mode(void *data, int mode);
 int max77775_process_check_accessory(void *data);
 extern void max77775_set_discover_identity(void *data);
 extern void max77775_set_dp_configure(void *data, uint8_t w_data);

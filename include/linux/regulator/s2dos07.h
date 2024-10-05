@@ -69,6 +69,9 @@ enum S2DOS07_reg {
 	S2DOS07_REG_BUCK_EN = 0x04,
 	S2DOS07_REG_IRQ_MASK = 0x06,
 	S2DOS07_REG_IRQ = 0x07,
+	S2DOS07_REG_UVP_STATUS,
+	S2DOS07_REG_OVP_STATUS,
+	S2DOS07_REG_OVP_MODE,
 
 	S2DOS07_REG_0D_AUTHORITY = 0x0C,
 	S2DOS07_REG_0D_CONTROL = 0x0D,
@@ -83,7 +86,7 @@ enum S2DOS07_regulators {
 	S2DOS07_BUCK1,
 
 #if IS_ENABLED(CONFIG_SEC_PM)
-	S2DOS05_ELVXX,
+	S2DOS07_ELVXX,
 #endif /* CONFIG_SEC_PM */
 
 	S2DOS07_REG_MAX,
@@ -114,5 +117,13 @@ enum S2DOS07_regulators {
 extern int s2dos07_read_reg(struct i2c_client *i2c, u8 reg, u8 *dest);
 extern int s2dos07_write_reg(struct i2c_client *i2c, u8 reg, u8 value);
 extern int s2dos07_update_reg(struct i2c_client *i2c, u8 reg, u8 val, u8 mask);
+
+#if IS_ENABLED(CONFIG_SEC_KUNIT)
+extern int s2m_set_voltage_time_sel(struct regulator_dev *rdev,
+					unsigned int old_selector,
+					unsigned int new_selector);
+
+extern struct regulator_desc regulators[];
+#endif
 
 #endif /*  __LINUX_MFD_S2DOS07_H */

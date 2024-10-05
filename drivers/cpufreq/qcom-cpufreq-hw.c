@@ -18,6 +18,9 @@
 #include <linux/spinlock.h>
 #include <linux/qcom-cpufreq-hw.h>
 #include <linux/topology.h>
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+#include <linux/sec_pm_log.h>
+#endif
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/dcvsh.h>
@@ -84,6 +87,14 @@ struct qcom_cpufreq_data {
 	bool per_core_dcvs;
 	unsigned long dcvsh_freq_limit;
 	struct device_attribute freq_limit_attr;
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	unsigned long lowest_freq;
+	bool limiting;
+
+	ktime_t start_time;
+	ktime_t limited_time;
+	unsigned long accu_time;
+#endif
 };
 
 static unsigned long cpu_hw_rate, xo_rate;
@@ -487,6 +498,17 @@ static void qcom_lmh_dcvs_notify(struct qcom_cpufreq_data *data)
 		if (throttled_freq >= data->last_non_boost_freq)
 			thermal_pressure = policy->cpuinfo.max_freq;
 
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+		if (data->limiting == false) {
+			ss_thermal_print("Start lmh cpu%d @%lu\n", cpu, (thermal_pressure / 1000));
+			data->lowest_freq = thermal_pressure;
+			data->limiting = true;
+			data->start_time = ktime_get();
+		} else {
+			if (thermal_pressure < data->lowest_freq)
+				data->lowest_freq = thermal_pressure;
+		}
+#endif
 		mod_delayed_work(system_highpri_wq, &data->throttle_work,
 				 msecs_to_jiffies(10));
 	}
@@ -656,6 +678,10 @@ static int qcom_cpufreq_hw_lmh_init(struct cpufreq_policy *policy, int index,
 	data->freq_limit_attr.attr.mode = 0444;
 	data->dcvsh_freq_limit = U32_MAX;
 	device_create_file(cpu_dev, &data->freq_limit_attr);
+
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	data->accu_time = 0;
+#endif
 
 	return 0;
 }

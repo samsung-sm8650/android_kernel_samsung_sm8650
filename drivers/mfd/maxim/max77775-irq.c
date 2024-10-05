@@ -117,6 +117,7 @@ static const struct max77775_irq_data max77775_irqs[] = {
 	[MAX77775_IRQ_VDM_ENTER_MODE_INT] = { .group = VDM_INT, .mask = 1 << 3 },
 
 	[MAX77775_IRQ_USBID_INT] = { .group = SPARE_INT, .mask = 1 << 7 },
+	[MAX77775_IRQ_TACONN_INT] = { .group = SPARE_INT, .mask = 1 << 6 },
 
 	[MAX77775_VIR_IRQ_ALTERROR_INT] = { .group = VIR_INT, .mask = 1 << 0 },
 };

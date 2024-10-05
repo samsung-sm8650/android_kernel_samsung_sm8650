@@ -1014,6 +1014,7 @@ struct cs40l26_svc_le {
 #ifdef CONFIG_CS40L26_SAMSUNG_FEATURE
 struct cs40l26_samsung_platform_data {
 	bool is_f0_tracking;
+	bool is_mv_support;
 	int f0_offset;
 	const char *owt_lib_compat_version;
 	const char *ap_chipset;
