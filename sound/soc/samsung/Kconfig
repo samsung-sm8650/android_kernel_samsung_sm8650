@@ -240,3 +240,19 @@ config SND_SOC_SAMSUNG_MIDAS_WM1811
 	  Say Y if you want to add support for SoC audio on the Midas boards.
 
 endif #SND_SOC_SAMSUNG
+
+config SND_SOC_SAMSUNG_AUDIO
+	tristate "Audio support for Samsung Projects"
+	help
+	  Say Y here to enable audio support for the Samsung Audio.
+
+config SND_DEBUG_PROC_TEST_FOR_ON_DEVICE
+	tristate "KUnit test for snd_debug_proc_test"
+	depends on SEC_KUNIT
+	depends on SND_SOC_SAMSUNG_AUDIO
+
+config SND_DEBUG_PROC_TEST_FOR_ONLY_UML
+	tristate "KUnit test for snd_debug_proc_test"
+	depends on SEC_KUNIT
+	depends on UML
+	depends on SND_SOC_SAMSUNG_AUDIO

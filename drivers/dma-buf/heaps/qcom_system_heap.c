@@ -53,7 +53,7 @@
 #include <linux/kthread.h>
 #include <linux/qcom_dma_heap.h>
 #include <uapi/linux/sched/types.h>
-#include <linux/page_owner.h>
+#include <trace/hooks/mm.h>
 
 #include "qcom_dma_heap_secure_utils.h"
 #include "qcom_dynamic_page_pool.h"
@@ -388,6 +388,7 @@ static void system_heap_buf_free(struct deferred_freelist_item *item,
 			}
 		}
 	}
+	atomic_long_sub(buffer->len, &sys_heap->total_bytes);
 	sg_free_table(table);
 	kfree(buffer);
 }
@@ -431,8 +432,6 @@ struct page *qcom_sys_heap_alloc_largest_available(struct dynamic_page_pool **po
 
 		if (dynamic_pool_needs_refill(pools[i]))
 			wake_up_process(pools[i]->refill_worker);
-
-		set_page_owner(page, pools[i]->order, GFP_KERNEL);
 
 		return page;
 	}
@@ -525,6 +524,7 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 					    unsigned long fd_flags,
 					    unsigned long heap_flags)
 {
+	struct qcom_system_heap *sys_heap;
 	struct qcom_sg_buffer *buffer;
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
 	struct dma_buf *dmabuf;
@@ -533,6 +533,8 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 	if (!buffer)
 		return ERR_PTR(-ENOMEM);
+
+	sys_heap = dma_heap_get_drvdata(heap);
 
 	ret = system_qcom_sg_buffer_alloc(heap, buffer, len, false);
 	if (ret)
@@ -555,6 +557,7 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 		goto free_vmperm;
 	}
 
+	atomic_long_add(buffer->len, &sys_heap->total_bytes);
 	return dmabuf;
 
 free_vmperm:
@@ -574,6 +577,9 @@ static long get_pool_size_bytes(struct dma_heap *heap)
 	int i;
 	struct qcom_system_heap *sys_heap = dma_heap_get_drvdata(heap);
 
+	if (!strncmp(dma_heap_get_name(heap), "system", 6))
+		return 0;
+
 	for (i = 0; i < NUM_ORDERS; i++)
 		total_size += dynamic_page_pool_total(sys_heap->pool_list[i], true);
 
@@ -584,6 +590,42 @@ static const struct dma_heap_ops system_heap_ops = {
 	.allocate = system_heap_allocate,
 	.get_pool_size = get_pool_size_bytes,
 };
+
+static long get_system_heap_total_kbytes(struct dma_heap *heap)
+{
+	struct qcom_system_heap *sys_heap;
+
+	if (!heap)
+		return 0;
+
+	sys_heap = dma_heap_get_drvdata(heap);
+	if (!sys_heap)
+		return 0;
+
+	return atomic_long_read(&sys_heap->total_bytes) >> 10;
+}
+
+static void qcom_system_heap_show_mem(void *data, unsigned int filter, nodemask_t *nodemask)
+{
+	struct dma_heap *heap = (struct dma_heap *)data;
+	long total_kbytes = get_system_heap_total_kbytes(heap);
+
+	if (total_kbytes == 0)
+		return;
+
+	pr_info("%s: %ld kB\n", dma_heap_get_name(heap), total_kbytes);
+}
+
+static void qcom_system_heap_meminfo(void *data, struct seq_file *m)
+{
+	struct dma_heap *heap = (struct dma_heap *)data;
+	long total_kbytes = get_system_heap_total_kbytes(heap);
+
+	if (total_kbytes == 0)
+		return;
+
+	show_val_meminfo(m, dma_heap_get_name(heap), total_kbytes);
+}
 
 void qcom_system_heap_create(const char *name, const char *system_alias, bool uncached)
 {
@@ -645,6 +687,8 @@ void qcom_system_heap_create(const char *name, const char *system_alias, bool un
 		pr_info("%s: DMA-BUF Heap: Created '%s'\n", __func__, system_alias);
 	}
 
+	register_trace_android_vh_show_mem(qcom_system_heap_show_mem, (void *)heap);
+	register_trace_android_vh_meminfo_proc_show(qcom_system_heap_meminfo, (void *)heap);
 	return;
 
 stop_worker:

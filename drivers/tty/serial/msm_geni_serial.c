@@ -33,6 +33,10 @@
 #include <linux/tty_flip.h>
 #include <uapi/linux/msm_geni_serial.h>
 
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+#include "msm_geni_serial_proc_log.h"
+#endif
+
 static bool con_enabled = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE_DEFAULT_ENABLED);
 
 /* UART specific GENI registers */
@@ -336,6 +340,11 @@ struct msm_geni_serial_ver_info {
 	int m_fw_ver;
 	int s_fw_ver;
 };
+
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+#undef DMA_RX_BUF_SIZE
+#define DMA_RX_BUF_SIZE		(4096)
+#endif
 
 struct msm_geni_serial_rsc {
 	struct device *ctrl_dev;
@@ -5435,6 +5444,10 @@ static void msm_geni_check_stop_engine(struct uart_port *uport)
 	}
 }
 
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+#include "msm_geni_serial_proc_log.c"
+#endif
+
 static int msm_geni_serial_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -5627,6 +5640,17 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		pr_info("boot_kpi: M - DRIVER GENI_CONSOLE_%d Ready\n", line);
 	else
 		pr_info("boot_kpi: M - DRIVER GENI_HS_UART_%d Ready\n", line);
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+	if (!dev_port->is_console && dev_port->is_clk_aon) {
+		register_serial_ipc_log_context((struct ipc_log_context *)dev_port->ipc_log_pwr);
+		register_serial_ipc_log_context((struct ipc_log_context *)dev_port->ipc_log_misc);
+		register_serial_ipc_log_context((struct ipc_log_context *)dev_port->ipc_log_rx);
+		register_serial_ipc_log_context((struct ipc_log_context *)dev_port->ipc_log_tx);
+		ret = create_proc_log_file();
+		if (ret < 0)
+			dev_err(&pdev->dev, "Failed to register serial ipc log context: %d\n", ret);
+	}
+#endif
 
 exit_geni_serial_probe:
 	UART_LOG_DBG(dev_port->ipc_log_misc, &pdev->dev, "%s: ret:%d\n",

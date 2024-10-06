@@ -15,7 +15,9 @@ struct usb_repeater  {
 	struct device		*dev;
 	const char		*label;
 	unsigned int		flags;
-
+#if IS_ENABLED(CONFIG_USB_PHY_SETTING_QCOM)
+	bool				is_host;
+#endif
 	struct list_head	head;
 	int	(*reset)(struct usb_repeater *x, bool bring_out_of_reset);
 	int	(*init)(struct usb_repeater *x);

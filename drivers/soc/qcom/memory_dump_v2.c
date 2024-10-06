@@ -1069,6 +1069,9 @@ static int cpuss_dump_init(struct platform_device *pdev,
 	return initialized;
 }
 
+static bool test_sec_debug_level(const struct device_node *node);
+static bool test_sec_eneable_any_debug_level(const struct device_node *child_node, bool matched_debug_level);
+
 #define MSM_DUMP_DATA_SIZE sizeof(struct msm_dump_data)
 static int mem_dump_alloc(struct platform_device *pdev)
 {
@@ -1087,6 +1090,7 @@ static int mem_dump_alloc(struct platform_device *pdev)
 	uint32_t ns_vm_perms[] = {PERM_READ | PERM_WRITE};
 	u64 shm_bridge_handle;
 	int initialized = 0;
+	bool matched_debug_level = test_sec_debug_level(node);
 
 	if (mem_dump_reserve_mem(&pdev->dev) != 0)
 		return -ENOMEM;
@@ -1094,6 +1098,12 @@ static int mem_dump_alloc(struct platform_device *pdev)
 	/* For dump table registration with IMEM */
 	total_size = sizeof(struct msm_dump_table) * 2;
 	for_each_available_child_of_node(node, child_node) {
+		if (!test_sec_eneable_any_debug_level(child_node, matched_debug_level)) {
+			dev_dbg(&pdev->dev, "Skip for current debug levle - %s\n",
+					child_node->name);
+			continue;
+		}
+
 		ret = of_property_read_u32(child_node, "qcom,dump-size", &size);
 		if (ret) {
 			dev_err(&pdev->dev, "Unable to find size for %s\n",
@@ -1146,6 +1156,9 @@ static int mem_dump_alloc(struct platform_device *pdev)
 	dump_vaddr += (sizeof(struct msm_dump_table) * 2);
 	phys_addr += (sizeof(struct msm_dump_table) * 2);
 	for_each_available_child_of_node(node, child_node) {
+		if (!test_sec_eneable_any_debug_level(child_node, matched_debug_level))
+			continue;
+
 		ret = of_property_read_u32(child_node, "qcom,dump-size", &size);
 		if (ret)
 			continue;
@@ -1223,3 +1236,46 @@ module_platform_driver(mem_dump_driver);
 
 MODULE_DESCRIPTION("Memory Dump V2 Driver");
 MODULE_LICENSE("GPL v2");
+
+#if IS_ENABLED(CONFIG_SEC_QC_SUMMARY)
+#include <linux/samsung/debug/qcom/sec_qc_summary.h>
+
+void sec_qc_summary_set_msm_memdump_info(struct sec_qc_summary_data_apss *apss)
+{
+	apss->msm_memdump_paddr = (uint64_t)memdump.table_phys;
+	pr_info("%s : 0x%llx\n", __func__, apss->msm_memdump_paddr);
+}
+EXPORT_SYMBOL(sec_qc_summary_set_msm_memdump_info);
+#endif
+
+#if IS_ENABLED(CONFIG_SEC_QC_DEBUG)
+#include <linux/samsung/debug/sec_debug.h>
+#include <linux/samsung/sec_of.h>
+
+static bool test_sec_debug_level(const struct device_node *node)
+{
+	unsigned int sec_dbg_level = sec_debug_level();
+	int err;
+
+	err = sec_of_test_debug_level(node, "sec,debug_level", sec_dbg_level);
+	if (err == -EINVAL)
+		return false;
+
+	return true;
+}
+
+static bool test_sec_eneable_any_debug_level(const struct device_node *child_node,
+		bool matched_debug_level)
+{
+	if (matched_debug_level)
+		return true;
+
+	if (of_property_read_bool(child_node, "sec,eneable-any_debug_level"))
+		return true;
+
+	return false;
+}
+#else
+static bool test_sec_debug_level(const struct device_node *node) { return true; }
+static bool test_sec_eneable_any_debug_level(const struct device_node *child_node, bool matched_debug_level) { return true; }
+#endif

@@ -39,6 +39,7 @@ struct wm_adsp {
 
 	bool preloaded;
 	bool fatal_error;
+	bool hibernate;
 
 	struct list_head compr_list;
 	struct list_head buffer_list;

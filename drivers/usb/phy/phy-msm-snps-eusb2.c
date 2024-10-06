@@ -25,6 +25,9 @@
 #include <linux/usb/dwc3-msm.h>
 #include <linux/usb/phy.h>
 #include <linux/usb/repeater.h>
+#if IS_ENABLED(CONFIG_USB_CONFIGFS_F_SS_MON_GADGET)
+#include <linux/usb/f_ss_mon_gadget.h>
+#endif
 
 #define USB_PHY_UTMI_CTRL0		(0x3c)
 #define OPMODE_MASK			(0x3 << 3)
@@ -150,6 +153,9 @@
 #define USB_HSPHY_1P2_VOL_MAX		1200000	/* uV */
 #define USB_HSPHY_1P2_HPM_LOAD		5905	/* uA */
 #define USB_HSPHY_VDD_HPM_LOAD		7757	/* uA */
+
+#undef dev_dbg
+#define dev_dbg dev_err
 
 struct msm_eusb2_phy {
 	struct usb_phy		phy;
@@ -665,7 +671,17 @@ static int msm_eusb2_repeater_reset_and_init(struct msm_eusb2_phy *phy)
 	ret = usb_repeater_reset(phy->ur, true);
 	if (ret)
 		dev_err(phy->phy.dev, "repeater reset failed.\n");
-
+#if IS_ENABLED(CONFIG_USB_PHY_SETTING_QCOM)
+	if (phy->ur) {
+		if (phy->phy.flags & PHY_HOST_MODE)
+			phy->ur->is_host = true;
+		else
+			phy->ur->is_host = false;
+	} else
+		dev_err(phy->phy.dev, "phy->ur is null.\n");
+	/* device start up time. TI 3ms, NXP 1ms */
+	usleep_range(3000, 3500);
+#endif
 	ret = usb_repeater_init(phy->ur);
 	if (ret)
 		dev_err(phy->phy.dev, "repeater init failed.\n");
@@ -882,7 +898,13 @@ static void msm_eusb2_phy_vbus_draw_work(struct work_struct *w)
 			return;
 		}
 	}
-
+#if IS_ENABLED(CONFIG_USB_CONFIGFS_F_SS_MON_GADGET)
+	/* USB SUSPEND CURRENT SETTINGS */
+	if (phy->vbus_draw == 2) {
+		pr_err("[USB] make suspend currrent event\n");
+		make_suspend_current_event();
+	}
+#endif
 	dev_info(phy->phy.dev, "Avail curr from USB = %u\n", phy->vbus_draw);
 	/* Set max current limit in uA */
 	val.intval = 1000 * phy->vbus_draw;
