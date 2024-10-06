@@ -23,6 +23,8 @@
 #include <linux/ipc_logging.h>
 #include <soc/qcom/minidump.h>
 
+#include <linux/samsung/debug/sec_debug.h>
+
 #include "ipc_logging_private.h"
 
 #define LOG_PAGE_DATA_SIZE	sizeof(((struct ipc_log_page *)0)->data)
@@ -36,6 +38,8 @@ static LIST_HEAD(ipc_log_context_list);
 static DEFINE_RWLOCK(context_list_lock_lha1);
 static void *get_deserialization_func(struct ipc_log_context *ilctxt,
 				      int type);
+
+static void *debug_level_dummy_ctx;
 
 static struct ipc_log_page *get_first_page(struct ipc_log_context *ilctxt)
 {
@@ -307,7 +311,7 @@ static void msg_drop(struct ipc_log_context *ilctxt)
  * Commits messages to the FIFO.  If the FIFO is full, then enough
  * messages are dropped to create space for the new message.
  */
-void ipc_log_write(void *ctxt, struct encode_context *ectxt)
+static void __ipc_log_write(void *ctxt, struct encode_context *ectxt)
 {
 	struct ipc_log_context *ilctxt = (struct ipc_log_context *)ctxt;
 	int bytes_to_write;
@@ -355,6 +359,13 @@ void ipc_log_write(void *ctxt, struct encode_context *ectxt)
 	complete(&ilctxt->read_avail);
 	spin_unlock(&ilctxt->context_lock_lhb1);
 	read_unlock_irqrestore(&context_list_lock_lha1, flags);
+}
+
+void ipc_log_write(void *ctxt, struct encode_context *ectxt)
+{
+	if (!sec_debug_is_enabled())
+		return;
+	__ipc_log_write(ctxt, ectxt);
 }
 EXPORT_SYMBOL(ipc_log_write);
 
@@ -530,6 +541,9 @@ int ipc_log_string(void *ilctxt, const char *fmt, ...)
 	struct encode_context ectxt;
 	int avail_size, data_size, hdr_size = sizeof(struct tsv_header);
 	va_list arg_list;
+
+	if (!sec_debug_is_enabled())
+		return 0;
 
 	if (!ilctxt)
 		return -EINVAL;
@@ -822,7 +836,7 @@ static void *get_deserialization_func(struct ipc_log_context *ilctxt,
  *
  * returns context id on success, NULL on failure
  */
-void *ipc_log_context_create(int max_num_pages,
+static void *__ipc_log_context_create(int max_num_pages,
 			     const char *mod_name, uint32_t feature_version)
 {
 	struct ipc_log_context *ctxt = NULL, *tmp;
@@ -921,6 +935,17 @@ release_ipc_log_context:
 	kfree(ctxt);
 	return 0;
 }
+
+void *ipc_log_context_create(int max_num_pages,
+			     const char *mod_name, uint32_t feature_version)
+{
+
+	if (sec_debug_is_enabled() || !debug_level_dummy_ctx)
+		return __ipc_log_context_create(max_num_pages, mod_name, feature_version);
+
+	return debug_level_dummy_ctx;
+
+}
 EXPORT_SYMBOL(ipc_log_context_create);
 
 void ipc_log_context_free(struct kref *kref)
@@ -937,13 +962,14 @@ void ipc_log_context_free(struct kref *kref)
 
 	kfree(ilctxt);
 }
+EXPORT_SYMBOL(ipc_log_context_free);
 
 /*
  * Destroy debug log context
  *
  * @ctxt: debug log context created by calling ipc_log_context_create API.
  */
-int ipc_log_context_destroy(void *ctxt)
+static int __ipc_log_context_destroy(void *ctxt)
 {
 	struct ipc_log_context *ilctxt = (struct ipc_log_context *)ctxt;
 	struct dfunc_info *df_info = NULL, *tmp = NULL;
@@ -971,7 +997,76 @@ int ipc_log_context_destroy(void *ctxt)
 
 	return 0;
 }
+
+int ipc_log_context_destroy(void *ctxt)
+{
+	if (sec_debug_is_enabled() || (ctxt != (void *)debug_level_dummy_ctx))
+		return __ipc_log_context_destroy(ctxt);
+
+	return 0;
+}
 EXPORT_SYMBOL(ipc_log_context_destroy);
+
+#define LOG_CTX_PAGE_CNT 150
+static void *log_ctx;
+#define MAX_LINE_SIZE 512
+static char *buf;
+
+void net_log(const char *fmt, ...)
+{
+	va_list arg_list;
+
+	va_start(arg_list, fmt);
+	if (log_ctx && buf) {
+		vscnprintf(buf, MAX_LINE_SIZE, fmt, arg_list);
+		ipc_log_string(log_ctx, "%s", buf);
+	}
+	va_end(arg_list);
+}
+EXPORT_SYMBOL_GPL(net_log);
+
+static int __init net_ipc_log_init(void)
+{
+
+	if (!log_ctx)
+		log_ctx = ipc_log_context_create(LOG_CTX_PAGE_CNT,
+							"net_log", 0);
+	if (!buf)
+		buf = kmalloc(MAX_LINE_SIZE, GFP_KERNEL);
+
+	// error ????
+	//
+	return 0;
+}
+
+static void __exit net_ipc_log_exit(void)
+{
+	if (log_ctx)
+		ipc_log_context_destroy(log_ctx);
+	if (buf)
+		kfree(buf);
+}
+
+static int __init __create_dummy_ipc_context(void)
+{
+	if (sec_debug_is_enabled())
+		return 0;
+
+	if (!debug_level_dummy_ctx)
+		debug_level_dummy_ctx = __ipc_log_context_create(1, "dummy_log", 0);
+
+	return 0;
+}
+
+static void __exit __destory_dummy_ipc_context(void)
+{
+
+	if (sec_debug_is_enabled())
+		return;
+
+	if (debug_level_dummy_ctx)
+		__ipc_log_context_destroy(debug_level_dummy_ctx);
+}
 
 static int __init ipc_logging_init(void)
 {
@@ -980,10 +1075,21 @@ static int __init ipc_logging_init(void)
 	register_minidump((u64)&ipc_log_context_list, sizeof(struct list_head),
 			  "ipc_log_ctxt_list", minidump_buf_cnt);
 
+	__create_dummy_ipc_context();
+	net_ipc_log_init();
+
 	return 0;
 }
 
+static void __exit ipc_logging_exit(void)
+{
+	net_ipc_log_exit();
+
+	__destory_dummy_ipc_context();
+}
+
 module_init(ipc_logging_init);
+module_exit(ipc_logging_exit);
 
 MODULE_DESCRIPTION("ipc logging");
 MODULE_LICENSE("GPL");

@@ -5488,6 +5488,47 @@ static void walt_init_tg_pointers(void)
 	rcu_read_unlock();
 }
 
+#if IS_ENABLED(CONFIG_RQ_STAT_SHOW)
+static int rq_stat_show(struct seq_file *m, void *data)
+{
+	int cpu;
+	char buf[64];
+	int len = 0;
+	int g_gp_sum = 0;
+	int s_t_sum = 0;
+	//8650 specific cluster id
+	int gold_id = 1;
+	int prime_id = 3;
+
+	for_each_possible_cpu(cpu) {
+		struct rq *rq = cpu_rq(cpu);
+		struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
+		if (wrq->cluster->id == gold_id || wrq->cluster->id == prime_id)
+			g_gp_sum += rq->nr_running;
+		else
+			s_t_sum += rq->nr_running;
+	}
+	len += snprintf(buf + len, 64 - len, "%u ", s_t_sum);
+	len += snprintf(buf + len, 64 - len, "%u ", g_gp_sum);
+	seq_printf(m, "%s\n", buf);
+
+	return 0;
+}
+
+static int rq_stat_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, rq_stat_show, NULL);
+}
+
+static const struct proc_ops proc_rq_stat_op = {
+	.proc_open = rq_stat_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+};
+#endif
+
+
 static void walt_init(struct work_struct *work)
 {
 	struct ctl_table_header *hdr;
@@ -5550,6 +5591,11 @@ static void walt_init(struct work_struct *work)
 	walt_boost_init();
 	waltgov_register();
 
+#if IS_ENABLED(CONFIG_RQ_STAT_SHOW)
+	if (!proc_create("rq_stat", 0444, NULL, &proc_rq_stat_op))
+		pr_err("Failed to register proc interface 'rq_stat'\n");
+#endif
+
 	i = match_string(sched_feat_names, __SCHED_FEAT_NR, "TTWU_QUEUE");
 	if (i >= 0) {
 		static_key_disable(&sched_feat_keys[i]);
@@ -5565,6 +5611,24 @@ static void android_vh_update_topology_flags_workfn(void *unused, void *unused2)
 	schedule_work(&walt_init_work);
 }
 
+static void walt_devicetree_init(void)
+{
+	struct device_node *np;
+	int ret;
+
+	np = of_find_node_by_name(NULL, "sched_walt");
+	if (!np) {
+		pr_err("Failed to find node of sched_walt\n");
+		return;
+	}
+	
+	ret = of_property_read_u32(np, "panic_on_walt_bug", &sysctl_panic_on_walt_bug);
+	if (ret < 0) {
+		pr_err("Failed to read panic_on_walt_bug property\n");
+		return;
+	}
+}
+
 #define WALT_VENDOR_DATA_SIZE_TEST(wstruct, kstruct)		\
 	BUILD_BUG_ON(sizeof(wstruct) > (sizeof(u64) *		\
 		ARRAY_SIZE(((kstruct *)0)->android_vendor_data1)))
@@ -5574,6 +5638,8 @@ static int walt_module_init(void)
 	/* compile time checks for vendor data size */
 	WALT_VENDOR_DATA_SIZE_TEST(struct walt_task_struct, struct task_struct);
 	WALT_VENDOR_DATA_SIZE_TEST(struct walt_task_group, struct task_group);
+
+	walt_devicetree_init();
 
 	register_trace_android_vh_update_topology_flags_workfn(
 			android_vh_update_topology_flags_workfn, NULL);
@@ -5589,4 +5655,15 @@ MODULE_LICENSE("GPL v2");
 
 #if IS_ENABLED(CONFIG_SCHED_WALT_DEBUG)
 MODULE_SOFTDEP("pre: sched-walt-debug");
+#endif
+
+#if IS_ENABLED(CONFIG_SEC_QC_SUMMARY)
+#include <linux/samsung/debug/qcom/sec_qc_summary.h>
+
+void sec_qc_summary_set_sched_walt_info(struct sec_qc_summary_data_apss *apss)
+{
+	apss->aplpm.num_clusters = num_sched_clusters;
+	apss->aplpm.p_cluster = virt_to_phys(sched_cluster);
+}
+EXPORT_SYMBOL(sec_qc_summary_set_sched_walt_info);
 #endif

@@ -27,6 +27,10 @@
 #define FOPS_INIT_VAL ERR_PTR(-EINVAL)
 static const struct file_operations *dma_buf_cached_fops;
 
+#if defined(CONFIG_RBIN)
+int add_rbin_heap(struct platform_heap *heap_data);
+#endif
+
 static int qcom_dma_heap_probe(struct platform_device *pdev)
 {
 	int ret = 0;

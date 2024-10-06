@@ -250,6 +250,12 @@ dtc_cpp_flags  = -Wp,-MMD,$(depfile).pre.tmp -nostdinc                    \
 		 $(addprefix -I,$(DTC_INCLUDE))                          \
 		 -undef -D__DTS__
 
+ifeq ($(CONFIG_SEC_FACTORY),y)
+dtc_cpp_flags += -DCONFIG_SEC_FACTORY
+ifeq ($(CONFIG_SEC_FACTORY_INTERPOSER),y)
+dtc_cpp_flags += -DCONFIG_SEC_FACTORY_INTERPOSER
+endif
+endif
 ifdef CONFIG_OBJTOOL
 
 objtool := $(objtree)/tools/objtool/objtool

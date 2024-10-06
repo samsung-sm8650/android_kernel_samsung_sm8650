@@ -25,6 +25,16 @@
 #include "tsens.h"
 #include "thermal_zone_internal.h"
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+#define MAX_TSENS_CONTROLLER	3
+#define DEFAULT_PERIOD	5000 // 5s
+
+static struct delayed_work ts_print_work;
+struct tsens_priv *ts_priv[MAX_TSENS_CONTROLLER];
+
+static int ts_print_count;
+#endif
+
 /**
  * struct tsens_irq_data - IRQ status and temperature violations
  * @up_viol:        upper threshold violated
@@ -776,6 +786,27 @@ static int dbg_version_show(struct seq_file *s, void *data)
 DEFINE_SHOW_ATTRIBUTE(dbg_version);
 DEFINE_SHOW_ATTRIBUTE(dbg_sensors);
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+static unsigned int polling_period;
+
+static int polling_period_get(void *data, u64 *val)
+{
+	*val = polling_period;
+
+	return 0;
+}
+
+static int polling_period_set(void *data, u64 val)
+{
+	polling_period = val;
+
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(polling_period_fops, polling_period_get,
+				polling_period_set, "%llu\n");
+#endif
+
 static void tsens_debug_init(struct platform_device *pdev)
 {
 	struct tsens_priv *priv = platform_get_drvdata(pdev);
@@ -792,6 +823,15 @@ static void tsens_debug_init(struct platform_device *pdev)
 	if (!file)
 		debugfs_create_file("version", 0444, priv->debug_root,
 				    pdev, &dbg_version_fops);
+
+#if IS_ENABLED(CONFIG_SEC_PM)
+	file = debugfs_lookup("polling_period", priv->debug_root);
+	if (!file)
+		debugfs_create_file_unsafe("polling_period", 0644, priv->debug_root,
+				    pdev, &polling_period_fops);
+
+	polling_period = DEFAULT_PERIOD;
+#endif
 
 	/* A directory for each instance of the TSENS IP */
 	priv->debug = debugfs_create_dir(dev_name(&pdev->dev), priv->debug_root);
@@ -1079,6 +1119,40 @@ static int tsens_get_temp(struct thermal_zone_device *tz, int *temp)
 
 	return priv->ops->get_temp(s, temp);
 }
+
+#if IS_ENABLED(CONFIG_SEC_PM)
+static void __ref ts_print(struct work_struct *work)
+{
+	struct tsens_sensor *ts_sensor;
+	int temp = 0;
+	size_t i, j;
+	int added = 0, ret = 0;
+	char buffer[500] = { 0, };
+	bool work_flag = true;
+
+	ret = snprintf(buffer + added, sizeof(buffer) - added, "tsens[");
+	added += ret;
+
+	for (i = 0; i < ts_print_count; i++) {
+		for (j = 0; j < ts_priv[i]->num_sensors; j++) {
+			ts_sensor = &ts_priv[i]->sensor[j];
+			ts_priv[i]->ops->get_temp(ts_sensor, &temp);
+			ret = snprintf(buffer + added, sizeof(buffer) - added,
+						   "%d,", temp / 100);
+			added += ret;
+		}
+	}
+
+	buffer[added - 1] = ']';
+	pr_info("%s: %s\n", __func__, buffer);
+
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	work_flag = schedule_delayed_work(&ts_print_work, msecs_to_jiffies(polling_period));
+#else
+	work_flag = schedule_delayed_work(&ts_print_work, HZ * 5);
+#endif
+}
+#endif
 
 static int  __maybe_unused tsens_suspend(struct device *dev)
 {
@@ -1483,13 +1557,32 @@ static int tsens_probe(struct platform_device *pdev)
 	priv->tm_disable_on_suspend =
 				of_property_read_bool(np, "tm-disable-on-suspend");
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+	ret = tsens_register(priv);
+
+	ts_priv[ts_print_count++] = priv;
+
+
+	if (ts_print_count == MAX_TSENS_CONTROLLER) {
+		pr_info("%s: set schedule work\n", __func__);
+		INIT_DELAYED_WORK(&ts_print_work, ts_print);
+		schedule_delayed_work(&ts_print_work, 0);
+	}
+
+	return ret;
+#else
 	return tsens_register(priv);
+#endif
 }
 
 static int tsens_remove(struct platform_device *pdev)
 {
 	struct tsens_priv *priv = platform_get_drvdata(pdev);
 	int i;
+
+#if IS_ENABLED(CONFIG_SEC_PM)
+	cancel_delayed_work_sync(&ts_print_work);
+#endif
 
 	debugfs_remove_recursive(priv->debug_root);
 	tsens_disable_irq(priv);

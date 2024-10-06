@@ -47,6 +47,10 @@
 #endif
 #include "sdhci-msm.h"
 
+#if IS_ENABLED(CONFIG_SEC_MMC_FEATURE)
+#include "mmc-sec-feature.h"
+#endif
+
 #define CORE_MCI_VERSION		0x50
 #define CORE_VERSION_MAJOR_SHIFT	28
 #define CORE_VERSION_MAJOR_MASK		(0xf << CORE_VERSION_MAJOR_SHIFT)
@@ -4096,6 +4100,24 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 #endif
 }
 
+#if IS_ENABLED(CONFIG_SEC_MMC_FEATURE)
+static void sdhci_msm_sec_card_event(struct sdhci_host *host)
+{
+	sd_sec_card_event(host->mmc);
+}
+
+void sdhci_msm_sec_request_done(struct sdhci_host *host,
+		struct mmc_request *mrq)
+{
+	struct mmc_host *mmc = host->mmc;
+
+	mmc_sd_sec_check_req_err(mmc, mrq);
+
+	/* call mmc_request_done() to finish processing an MMC request */
+	mmc_request_done(mmc, mrq);
+}
+#endif
+
 static const struct sdhci_ops sdhci_msm_ops = {
 	.reset = sdhci_msm_reset,
 	.set_clock = sdhci_msm_set_clock,
@@ -4111,6 +4133,10 @@ static const struct sdhci_ops sdhci_msm_ops = {
 	.set_power = sdhci_set_power_noreg,
 	.hw_reset = sdhci_msm_hw_reset,
 	.set_timeout = sdhci_msm_set_timeout,
+#if IS_ENABLED(CONFIG_SEC_MMC_FEATURE)
+	.card_event = sdhci_msm_sec_card_event,
+	.request_done = sdhci_msm_sec_request_done,
+#endif
 };
 
 #if IS_ENABLED(CONFIG_MMC_SDHCI_MSM_SCALING)
@@ -5578,6 +5604,10 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	sdhci_msm_qos_init(msm_host);
 	/* Initialize sysfs entries */
 	sdhci_msm_init_sysfs_gating_qos(dev);
+
+#if IS_ENABLED(CONFIG_SEC_MMC_FEATURE)
+	sd_sec_set_features(host->mmc, pdev);
+#endif
 
 	if (of_property_read_bool(node, "supports-cqe"))
 		ret = sdhci_msm_cqe_add_host(host, pdev);

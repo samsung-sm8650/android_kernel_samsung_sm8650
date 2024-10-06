@@ -33,6 +33,9 @@
 #include "pcm.h"
 #include "power.h"
 #include "usb_audio_qmi_v01.h"
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+#include <linux/usb_notify.h>
+#endif
 
 #define BUS_INTERVAL_FULL_SPEED 1000 /* in us */
 #define BUS_INTERVAL_HIGHSPEED_AND_ABOVE 125 /* in us */
@@ -1545,6 +1548,9 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 
 	u8 pcm_card_num, pcm_dev_num, direction;
 	int info_idx = -EINVAL, datainterval = -EINVAL, ret = 0;
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+	int on, type;
+#endif
 
 	uaudio_dbg("sq_node:%x sq_port:%x sq_family:%x\n", sq->sq_node,
 			sq->sq_port, sq->sq_family);
@@ -1631,6 +1637,14 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 
 	if (atomic_dec_and_test(&chip->usage_count) && atomic_read(&chip->shutdown))
 		wake_up(&chip->shutdown_wait);
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+	if (subs->direction == SNDRV_PCM_STREAM_PLAYBACK)
+		type = NOTIFY_PCM_PLAYBACK;
+	else
+		type = NOTIFY_PCM_CAPTURE;
+	on = req_msg->enable;
+	store_usblog_notify(type, (void *)&on, NULL);
+#endif
 
 response:
 	if (!req_msg->enable && ret != -EINVAL && ret != -ENODEV) {

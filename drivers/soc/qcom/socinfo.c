@@ -18,6 +18,7 @@
 #include <soc/qcom/socinfo.h>
 
 #include <asm/unaligned.h>
+#include <linux/samsung/debug/sec_debug.h>
 
 /*
  * SoC version type with major number in the upper 16 bits and minor
@@ -29,6 +30,15 @@
 
 #define SMEM_SOCINFO_BUILD_ID_LENGTH           32
 #define SMEM_SOCINFO_CHIP_ID_LENGTH            32
+
+#define SMEM_IMAGE_VERSION_BLOCKS_COUNT 32
+#define SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE 128
+#define SMEM_IMAGE_VERSION_SIZE 4096
+#define SMEM_IMAGE_VERSION_NAME_SIZE 75
+#define SMEM_IMAGE_VERSION_VARIANT_SIZE 20
+#define SMEM_IMAGE_VERSION_VARIANT_OFFSET SMEM_IMAGE_VERSION_NAME_SIZE
+#define SMEM_IMAGE_VERSION_OEM_SIZE 32
+#define SMEM_IMAGE_VERSION_OEM_OFFSET (SMEM_IMAGE_VERSION_VARIANT_OFFSET+SMEM_IMAGE_VERSION_VARIANT_SIZE)
 
 static uint32_t socinfo_format;
 static const char *sku;
@@ -1179,7 +1189,80 @@ msm_get_feature_code(struct device *dev,
 }
 ATTR_DEFINE(feature_code);
 
+static ssize_t
+msm_get_crash(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	int ret = 0;
+	int is_debug_low = 0;
+
+	unsigned int debug_level = sec_debug_level();
+
+	switch (debug_level) {
+		case SEC_DEBUG_LEVEL_LOW:
+			is_debug_low = 1;
+			break;
+		case SEC_DEBUG_LEVEL_MID:
+			is_debug_low = 0;
+			break;
+	}
+
+	if (!is_debug_low) {
+#ifndef CONFIG_SEC_CDSP_NO_CRASH_FOR_ENG
+		BUG_ON(1);
+#endif
+	}
+	return ret;
+}
+ATTR_DEFINE(crash);
+
 /* End Sysfs Interfaces */
+
+static char *socinfo_get_image_version_base_address(void)
+{
+	size_t size;
+
+	return qcom_smem_get(QCOM_SMEM_HOST_ANY, SMEM_IMAGE_VERSION_TABLE,
+			&size);
+}
+
+static ssize_t msm_get_images(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int pos = 0;
+	int image;
+	char *image_address;
+
+	image_address = socinfo_get_image_version_base_address();
+	if (IS_ERR_OR_NULL(image_address))
+		return scnprintf(buf, PAGE_SIZE, "Unavailable");
+
+	*buf = '\0';
+	for (image = 0; image < SMEM_IMAGE_VERSION_BLOCKS_COUNT; image++) {
+		if (*image_address == '\0') {
+			image_address += SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
+			continue;
+		}
+
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos, "%d:\n",
+				image);
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos,
+				"\tCRM:\t\t%-.75s\n", image_address);
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos,
+				"\tVariant:\t%-.20s\n",
+				image_address + SMEM_IMAGE_VERSION_VARIANT_OFFSET);
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos,
+				"\tVersion:\t%-.33s\n",
+				image_address + SMEM_IMAGE_VERSION_OEM_OFFSET);
+
+		image_address += SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
+	}
+
+	return pos;
+}
+
+ATTR_DEFINE(images);
 
 static umode_t soc_info_attribute(struct kobject *kobj,
 		struct attribute *attr,
@@ -1241,6 +1324,8 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 		fallthrough;
 	case SOCINFO_VERSION(0, 12):
 		msm_custom_socinfo_attrs[i++] = &dev_attr_chip_family.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_crash.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_images.attr;
 		fallthrough;
 	case SOCINFO_VERSION(0, 11):
 	case SOCINFO_VERSION(0, 10):
