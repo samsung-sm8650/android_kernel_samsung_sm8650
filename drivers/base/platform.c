@@ -711,7 +711,7 @@ int platform_device_add(struct platform_device *pdev)
 		}
 	}
 
-	pr_debug("Registering platform device '%s'. Parent at %s\n",
+	pr_info("Registering platform device '%s'. Parent at %s\n",
 		 dev_name(&pdev->dev), dev_name(pdev->dev.parent));
 
 	ret = device_add(&pdev->dev);
@@ -864,6 +864,8 @@ int __platform_driver_register(struct platform_driver *drv,
 	drv->driver.owner = owner;
 	drv->driver.bus = &platform_bus_type;
 
+	pr_info("%s: Registering %s", __func__, drv->driver.name);
+
 	return driver_register(&drv->driver);
 }
 EXPORT_SYMBOL_GPL(__platform_driver_register);
@@ -908,6 +910,8 @@ int __init_or_module __platform_driver_probe(struct platform_driver *drv,
 {
 	int retval, code;
 
+	pr_info("%s: driver name %s\n",
+		__func__, drv->driver.name);
 	if (drv->driver.probe_type == PROBE_PREFER_ASYNCHRONOUS) {
 		pr_err("%s: drivers registered with %s can not be probed asynchronously\n",
 			 drv->driver.name, __func__);
@@ -1031,7 +1035,7 @@ int __platform_register_drivers(struct platform_driver * const *drivers,
 	int err;
 
 	for (i = 0; i < count; i++) {
-		pr_debug("registering platform driver %ps\n", drivers[i]);
+		pr_info("registering platform driver %ps\n", drivers[i]);
 
 		err = __platform_driver_register(drivers[i], owner);
 		if (err < 0) {
@@ -1045,7 +1049,7 @@ int __platform_register_drivers(struct platform_driver * const *drivers,
 
 error:
 	while (i--) {
-		pr_debug("unregistering platform driver %ps\n", drivers[i]);
+		pr_info("unregistering platform driver %ps\n", drivers[i]);
 		platform_driver_unregister(drivers[i]);
 	}
 
@@ -1066,7 +1070,7 @@ void platform_unregister_drivers(struct platform_driver * const *drivers,
 				 unsigned int count)
 {
 	while (count--) {
-		pr_debug("unregistering platform driver %ps\n", drivers[count]);
+		pr_info("unregistering platform driver %ps\n", drivers[count]);
 		platform_driver_unregister(drivers[count]);
 	}
 }
