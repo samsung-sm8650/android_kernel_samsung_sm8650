@@ -536,11 +536,11 @@ static int max77705_port_type_set(struct typec_port *port, enum typec_port_type 
 		usbpd_data->typec_power_role, usbpd_data->typec_data_role, port_type);
 
 	reinit_completion(&usbpd_data->typec_reverse_completion);
-	if (port_type == TYPEC_PORT_DFP) {
+	if (port_type == TYPEC_PORT_SRC) {
 		msg_maxim("try reversing, from UFP(Sink) to DFP(Source)");
 		usbpd_data->typec_try_state_change = TRY_ROLE_SWAP_TYPE;
 		max77705_rprd_mode_change(usbpd_data, TYPE_C_ATTACH_DFP);
-	} else if (port_type == TYPEC_PORT_UFP) {
+	} else if (port_type == TYPEC_PORT_SNK) {
 		msg_maxim("try reversing, from DFP(Source) to UFP(Sink)");
 #if IS_ENABLED(CONFIG_PDIC_NOTIFIER)
 		max77705_ccic_event_work(usbpd_data,
