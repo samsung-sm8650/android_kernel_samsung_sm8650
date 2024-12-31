@@ -1,0 +1,24 @@
+# Samsung configuration options
+
+config SEC_PLATFORM
+	bool "Samsung device"
+	depends on ARCH_QCOM
+	help
+	  Support for Samsung products
+
+config SEC_PLATFORM_SM8650
+	bool "Samsung SM8650"
+	depends on ARCH_QCOM
+	select SEC_PLATFORM
+	help
+	  Support for Samsung SM8650 devices
+
+menu "Samsung board selection"
+
+	config SEC_PLATFORM_E3Q
+		bool "Samsung e3q board"
+		select SEC_PLATFORM_SM8650
+		help
+		  Support for Galaxy S24 Ultra
+
+endmenu
